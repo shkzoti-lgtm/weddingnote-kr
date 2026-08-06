@@ -73,7 +73,7 @@ def footer():
     <a href="/개인정보처리방침/">개인정보처리방침</a></div></div>
   <p class="disc">본 사이트는 제휴 광고를 포함하며 일부 링크를 통해 수익이 발생할 수 있습니다.
    방문자에게 추가 비용은 없습니다. 행사 일정과 혜택은 주최 측 사정에 따라 변경될 수 있습니다.</p>
-  <p class="biz">{BIZ}<br>Copyright © {YEAR} {SITE}. All rights reserved.</p>
+  <p class="biz">Copyright © {YEAR} {SITE}. All rights reserved.</p>
  </div></footer>
 <script src="/assets/events.js" defer></script></body></html>"""
 
@@ -194,11 +194,13 @@ def event_card(e, show_city=False):
     img = ('<a class="poster" href="/행사/%s/"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
            % (quote(e["slug"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
     city = ("<span class='ctag'>%s</span>" % esc(e["city"])) if show_city else ""
+    ben = ("<div class='benefit'>혜택 %s</div>" % esc(e.get("benefit",""))) if e.get("benefit") else ""
     return f"""<article class="card">{img}<div class="body">
  <div class="tags"><span class="status">모집중</span>{city}{dday}</div>
  <h3><a href="/행사/{quote(e['slug'])}/">{esc(e['name'])}</a></h3>
  <div class="meta">일정 {dates}</div>
  <div class="meta">장소 {esc(e['place'])}</div>
+ {ben}
  <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
 </div></article>"""
 
@@ -263,6 +265,7 @@ def event_page(e, same_city):
     <tr><th>장소</th><td>{esc(e['place'])}</td></tr>
     <tr><th>지역</th><td><a href="/{region}/{'' if e['city']==region else e['city']+'/'}">{esc(e['city'])} 웨딩박람회 전체 일정</a></td></tr>
     <tr><th>입장</th><td>무료 초대권 사전 신청</td></tr>
+    {("<tr><th>혜택</th><td>"+esc(e.get("benefit",""))+"</td></tr>") if e.get("benefit") else ""}
    </table>
    <a class="btn big" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청하기</a>
   </div>
@@ -297,23 +300,58 @@ def event_page(e, same_city):
     URLS.append(url)
 
 # ── 행사장별 페이지 ─────────────────────────────────────────────
-def venue_page(venue, evs):
+def venue_page(venue, evs, all_venues=None):
     slug = EV.slugify(venue)
     path = "/행사장/%s/" % slug; url = DOMAIN + path
     title = "%s 웨딩박람회 일정 %d건 | 무료초대권 - %s" % (venue, len(evs), SITE)
     desc = "%s에서 열리는 웨딩박람회 일정 %d건을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % (venue, len(evs))
     kw = "%s 웨딩박람회, %s 결혼박람회, %s 웨딩박람회 일정, %s 무료초대권" % (venue, venue, venue, venue)
     bc = [("홈",DOMAIN+"/"),("행사장",DOMAIN+"/행사장/"),(venue,url)]
-    lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs])]
+    info = VENUE_INFO.get(venue)
+    loc_txt = info[0] if info else "전국"
+    desc_txt = info[1] if info else ("%s에서 열리는 웨딩박람회 일정을 모았습니다. 참여 업체와 규모는 회차마다 다르므로 아래 일정에서 확인하세요." % venue)
+    park_txt = info[2] if info else "방문 전 주차 여건과 대중교통 동선을 확인하면 좋습니다."
+    other_venues = "".join('<a href="/행사장/%s/">%s</a>' % (quote(EV.slugify(v)), esc(v))
+                           for v in (all_venues or []) if v != venue)
+    faqv = [("%s 웨딩박람회는 얼마나 자주 열리나요?" % venue,
+             "%s에서는 주최사에 따라 매주 또는 격주로 박람회가 열립니다. 현재 확인된 일정은 %d건입니다." % (venue, len(evs))),
+            ("입장료가 있나요?", "무료 초대권을 사전 신청하면 무료로 입장할 수 있습니다."),
+            ("%s 방문 시 주차는 어떤가요?" % venue, park_txt)]
+    lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs]), ld_faq(faqv)]
     body = f"""{header()}
 {breadcrumb_html(bc)}
 <main>
  <section class="hero"><div class="wrap">
-  <p class="eyebrow">행사장별 일정</p>
+  <p class="eyebrow">행사장별 일정 · {loc_txt}</p>
   <h1>{esc(venue)} 웨딩박람회 일정</h1>
   <p class="lead">{esc(venue)}에서 열리는 웨딩박람회 {len(evs)}건입니다. 날짜를 확인하고 무료 초대권을 신청하세요.</p>
  </div></section>
- <section class="wrap"><div class="cards">{cards_html(evs, show_city=True)}</div></section>
+ <section class="wrap"><div class="aeo">
+  <h2>{esc(venue)}에서는 어떤 웨딩박람회가 열리나요?</h2>
+  <p class="ans">{desc_txt}</p>
+  <p class="ans-sub"><b>방문 전 알아두면 좋은 점</b></p>
+  <ol><li>{park_txt}</li>
+      <li>주말 오전 방문이 대기가 짧고 상담이 여유롭습니다.</li>
+      <li>무료 초대권을 미리 신청하면 우선 상담과 방문 선물 혜택을 받을 수 있습니다.</li></ol>
+  <p class="pnote">※ 일정과 참여 업체는 주최 측 사정에 따라 변경될 수 있습니다.</p>
+ </div></section>
+ <section class="wrap">
+  <h2 class="sec">{esc(venue)} 진행 예정 일정 ({len(evs)}건)</h2>
+  <div class="cards">{cards_html(evs, show_city=True)}</div>
+ </section>
+ <section class="wrap">
+  <h2 class="sec">{esc(venue)} 방문 체크포인트</h2>
+  <ul class="cautions">
+   <li>보증 인원과 식대 부가세 포함 여부를 확인하세요.</li>
+   <li>촬영 원본·수정본 비용과 드레스 피팅비 포함 여부를 물어보세요.</li>
+   <li>구두 약속은 계약서 특약란에 기재해야 합니다.</li>
+   <li>여러 박람회를 비교한 뒤 결정해도 늦지 않습니다.</li>
+  </ul>
+ </section>
+ <section class="wrap">
+  <h2 class="sec">다른 행사장 일정</h2>
+  <div class="chips near">{other_venues}</div>
+ </section>
 </main>{footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
     URLS.append(url)
@@ -644,7 +682,8 @@ if __name__ == "__main__":
         if v: vmap.setdefault(v, []).append(e)
     vmap = {k:v for k,v in vmap.items() if len(v) >= 2}
     venue_index(vmap)
-    for v, es in vmap.items(): venue_page(v, es)
+    _vn = sorted(vmap.keys())
+    for v, es in vmap.items(): venue_page(v, es, _vn)
     # 이번주 / 월별
     week_page(EVS)
     mmap = {}

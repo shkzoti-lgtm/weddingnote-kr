@@ -26,13 +26,15 @@ def fetch_sheet():
     def ix(n, d):
         return hd.index(n) if n in hd else d
     iR,iN,iS,iE,iP,iIMG,iL = ix('지역',0),ix('행사명',1),ix('시작일',2),ix('종료일',3),ix('장소',4),ix('이미지',6),ix('신청링크',7)
+    iB = hd.index('혜택') if '혜택' in hd else -1
     out = []
     for r in rows[1:]:
         if len(r) <= iL or not r[iN].strip(): continue
         img = r[iIMG].strip().replace(BANNER, "")
         link = r[iL].strip().replace(PT, "")
+        ben = r[iB].strip().replace("|"," ") if (iB >= 0 and len(r) > iB) else ""
         out.append("|".join([r[iR].strip(), r[iN].strip().replace("|","/"),
-            _norm_date(r[iS]), _norm_date(r[iE]), r[iP].strip().replace("|"," "), img, link]))
+            _norm_date(r[iS]), _norm_date(r[iE]), r[iP].strip().replace("|"," "), img, link, ben]))
     if len(out) >= 10:
         open(CACHE, "w", encoding="utf-8").write("\n".join(out) + "\n")
     return len(out)
@@ -55,6 +57,7 @@ def load(refresh=True):
         p = line.rstrip("\n").split("|")
         if len(p) < 7: continue
         city, name, s, e, place, img, code = p[:7]
+        benefit = p[7] if len(p) > 7 else ""
         if not (city and name and s): continue
         try:
             sd = datetime.date.fromisoformat(s)
@@ -71,6 +74,7 @@ def load(refresh=True):
             "img": (BANNER + img) if img else "",
             "link": (PT + code) if code else "/초대권-신청/",
             "slug": slugify(name) + "-" + s.replace("-", ""),
+            "benefit": benefit,
             "dday": (sd - today).days,
             "month": s[:7],
         })

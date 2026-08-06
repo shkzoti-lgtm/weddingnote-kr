@@ -155,3 +155,5 @@ footer .chips a:hover{background:var(--gold);color:var(--navy)}
   .aeo{padding:18px}
   .factsheet th{width:70px}
 }
+.card .benefit{margin-top:8px;font-size:13px;font-weight:700;color:#8a5a00;background:#fff8e8;
+  border:1px solid #f0e0b8;border-radius:6px;padding:7px 10px;line-height:1.5}
