@@ -3,7 +3,7 @@
 (function(){
   var box=document.getElementById('event-cards');
   if(!box) return;
-  var SHEET_ID='1f6BgoRzaC7sgye5_X0uEvElrGgab49uJ4NHcR5EfH44';
+  var SHEET_ID='1R_lX8DcKXiHX50SuHrpLCgn1AhTqduAmEl_YhuhLnPI';
   var URL='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&t='+Date.now();
   var cities=(box.getAttribute('data-cities')||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
   var multi=cities.length>1, cset={}; cities.forEach(function(c){cset[c]=1;});
