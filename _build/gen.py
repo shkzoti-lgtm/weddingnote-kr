@@ -6,6 +6,7 @@ from urllib.parse import quote
 from data import *
 from seo import *
 import events as EV
+import cpaad as CP
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "site")
 TODAY_D = datetime.date.today()
@@ -656,7 +657,24 @@ if __name__ == "__main__":
         print("  정적 파일 복사 완료")
     print("행사 데이터 로드…")
     EVS = EV.load(refresh=True)
-    print("  진행/예정 행사: %d건" % len(EVS))
+    print("  replyalba(시트): %d건" % len(EVS))
+
+    # cpaad 보완 — 시트에 없는 행사만 추가 (넷리파이 빌드 서버에서 수집)
+    try:
+        import datetime as _dt
+        for r in CP.merge_new(EVS):
+            sd = _dt.date.fromisoformat(r["start"]); ed = _dt.date.fromisoformat(r["end"])
+            if ed < _dt.date.today(): continue
+            EVS.append({"city":r["city"], "name":r["name"], "start":sd, "end":ed,
+                        "place":r["place"], "img":r["img"], "link":r["link"],
+                        "benefit":r["benefit"],
+                        "slug": EV.slugify(r["name"]) + "-" + r["start"].replace("-",""),
+                        "dday": (sd - _dt.date.today()).days, "month": r["start"][:7]})
+    except Exception as _e:
+        print("  cpaad 병합 생략:", type(_e).__name__, _e)
+
+    EVS.sort(key=lambda x: (x["start"], x["city"]))
+    print("  진행/예정 행사 총계: %d건" % len(EVS))
 
     by_city = {}
     for e in EVS: by_city.setdefault(e["city"], []).append(e)
