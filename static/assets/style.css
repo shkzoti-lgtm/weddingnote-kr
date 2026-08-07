@@ -298,3 +298,8 @@ td{font-size:14.5px}
   .stats span{font-size:10.5px}
   .sched-top{padding-top:22px !important}
 }
+
+/* 카드 하단 '자세히 보기' 링크 */
+.card .detail{display:block;text-align:center;margin-top:9px;padding:9px;font-size:13px;font-weight:600;
+  color:var(--gray);border:1px solid var(--line);border-radius:7px;transition:.16s}
+.card .detail:hover{color:var(--navy);border-color:var(--navy);background:var(--soft)}

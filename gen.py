@@ -259,6 +259,7 @@ def event_card(e, show_city=False):
  <div class="meta">장소 {esc(e['place'])}</div>
  {ben}
  <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
+ <a class="detail" href="/행사/{quote(e['slug'])}/">박람회 정보 자세히 보기</a>
 </div></article>"""
 
 def cards_html(evs, show_city=False, empty="현재 모집 중인 일정이 없습니다. 새 일정이 확정되면 이곳에 표시됩니다."):
