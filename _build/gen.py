@@ -146,7 +146,8 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
         for v in _vs[:6] if v in VENUE_INFO) or \
         '<div class="vcard"><h3>%s 지역 행사장</h3><p>%s에서는 컨벤션센터와 백화점 특별행사장을 중심으로 박람회가 열립니다. 정확한 위치는 각 일정 카드에서 확인하세요.</p></div>' % (esc(loc), esc(loc))
     steps_html = "".join('<li><b>%s</b><span>%s</span></li>' % (esc(t), esc(d)) for t, d in HOW_STEPS)
-    why_html = "".join('<div class="wcard"><b>%s</b><p>%s</p></div>' % (esc(t), esc(d)) for t, d in WHY_US)
+    why_html = "".join('<div class="wcard"><i>%02d</i><b>%s</b><p>%s</p></div>' % (i+1, esc(t), esc(d))
+                        for i, (t, d) in enumerate(WHY_US))
 
     static_cards = cards_html(my_evs, show_city=bool(cs),
         empty=f"{loc} 지역 일정을 준비 중입니다. 새로운 일정이 확정되면 이곳에 바로 표시됩니다.")
@@ -154,7 +155,9 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
     tips_html = "".join(f"<div class='tip'><h3>{t}</h3><p>{d}</p></div>" for t,d in tips)
     caution_html = "".join(f"<li>{c}</li>" for c in cautions)
     faq = faqs_for(loc)
-    faq_html = "".join(f"<details><summary>{q}</summary><div class='a'>{a}</div></details>" for q,a in faq)
+    faq_html = "".join(
+      f"<details><summary><span class='qmark'>Q</span><span class='qtxt'>{q}</span></summary>"
+      f"<div class='a'><span class='amark'>A</span><span>{a}</span></div></details>" for q,a in faq)
 
     lds = [ld_breadcrumb(bc), ld_faq(faq), ld_howto(loc), ld_website()]
     if my_evs: lds.append(ld_itemlist(loc, [x["name"] for x in my_evs]))
@@ -186,23 +189,27 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
  </section>
 
  <section class="wrap">
+  <p class="seclabel">VENUES</p>
   <h2 class="sec">{loc} 주요 박람회 개최지</h2>
   <p class="sub">자주 이용되는 행사장의 위치와 특징입니다.</p>
   <div class="venues">{venue_cards}</div>
  </section>
 
  <section class="wrap">
+  <p class="seclabel">COMPARE</p>
   <h2 class="sec">{loc} 웨딩박람회 유형 비교</h2>
   {compare_table(loc)}
  </section>
 
  <section class="wrap">
+  <p class="seclabel">HOW IT WORKS</p>
   <h2 class="sec">참여 방법 3단계</h2>
   <p class="sub">처음 방문하는 예비부부도 어렵지 않습니다.</p>
   <ol class="steps">{steps_html}</ol>
  </section>
 
  <section class="wrap">
+  <p class="seclabel">CHECKPOINT</p>
   <h2 class="sec">{loc} 방문 전 준비 체크포인트</h2>
   <div class="tips">{tips_html}</div>
  </section>
@@ -213,11 +220,13 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
  </section>
 
  <section class="wrap">
+  <p class="seclabel">WHY WEDDINGNOTE</p>
   <h2 class="sec">웨딩노트가 정리하는 방식</h2>
   <div class="whygrid">{why_html}</div>
  </section>
 
  <section class="wrap">
+  <p class="seclabel">FAQ</p>
   <h2 class="sec">{loc} 웨딩박람회 자주 묻는 질문</h2>
   <div class="faq">{faq_html}</div>
  </section>
@@ -296,7 +305,8 @@ def event_page(e, same_city):
       ("현장에서 꼭 계약해야 하나요?",
        "아닙니다. 견적만 받고 비교한 뒤 결정해도 됩니다. 다만 인기 예식장 날짜는 조기 마감될 수 있습니다."),
     ]
-    faq_html = "".join("<details><summary>%s</summary><div class='a'>%s</div></details>"%(q,a) for q,a in faq)
+    faq_html = "".join("<details><summary><span class='qmark'>Q</span><span class='qtxt'>%s</span></summary>"
+                       "<div class='a'><span class='amark'>A</span><span>%s</span></div></details>" % (q,a) for q,a in faq)
     lds = [ld_event(e), ld_breadcrumb(bc), ld_faq(faq), ld_howto(e["city"])]
     hero_img = ('<div class="ephoto"><img src="%s" alt="%s 포스터" loading="lazy"></div>'
                 % (esc(e["img"]), esc(e["name"]))) if e["img"] else ""
@@ -331,6 +341,7 @@ def event_page(e, same_city):
   </div>
  </section>
  <section class="wrap">
+  <p class="seclabel">CHECKPOINT</p>
   <h2 class="sec">방문 전 체크포인트</h2>
   <ul class="cautions">
    <li>보증 인원과 식대 부가세 포함 여부를 확인하세요.</li>
@@ -340,7 +351,7 @@ def event_page(e, same_city):
   </ul>
  </section>
  {('<section class="wrap"><h2 class="sec">'+esc(e['city'])+' 다른 웨딩박람회 일정</h2><ul class="rellist">'+rel+'</ul></section>') if rel else ''}
- <section class="wrap"><h2 class="sec">자주 묻는 질문</h2><div class="faq">{faq_html}</div></section>
+ <section class="wrap"><p class="seclabel">FAQ</p><h2 class="sec">자주 묻는 질문</h2><div class="faq">{faq_html}</div></section>
 </main>
 {footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
@@ -364,6 +375,9 @@ def venue_page(venue, evs, all_venues=None):
              "%s에서는 주최사에 따라 매주 또는 격주로 박람회가 열립니다. 현재 확인된 일정은 %d건입니다." % (venue, len(evs))),
             ("입장료가 있나요?", "무료 초대권을 사전 신청하면 무료로 입장할 수 있습니다."),
             ("%s 방문 시 주차는 어떤가요?" % venue, park_txt)]
+    faqv_html = "".join("<details><summary><span class='qmark'>Q</span><span class='qtxt'>%s</span></summary>"
+                        "<div class='a'><span class='amark'>A</span><span>%s</span></div></details>" % (q,a)
+                        for q,a in faqv)
     lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs]), ld_faq(faqv)]
     body = f"""{header()}
 {breadcrumb_html(bc)}
@@ -383,10 +397,12 @@ def venue_page(venue, evs, all_venues=None):
   <p class="pnote">※ 일정과 참여 업체는 주최 측 사정에 따라 변경될 수 있습니다.</p>
  </div></section>
  <section class="wrap">
+  <p class="seclabel">SCHEDULE</p>
   <h2 class="sec">{esc(venue)} 진행 예정 일정 ({len(evs)}건)</h2>
   <div class="cards">{cards_html(evs, show_city=True)}</div>
  </section>
  <section class="wrap">
+  <p class="seclabel">CHECKPOINT</p>
   <h2 class="sec">{esc(venue)} 방문 체크포인트</h2>
   <ul class="cautions">
    <li>보증 인원과 식대 부가세 포함 여부를 확인하세요.</li>
@@ -396,6 +412,12 @@ def venue_page(venue, evs, all_venues=None):
   </ul>
  </section>
  <section class="wrap">
+  <p class="seclabel">FAQ</p>
+  <h2 class="sec">{esc(venue)} 자주 묻는 질문</h2>
+  <div class="faq">{faqv_html}</div>
+ </section>
+ <section class="wrap">
+  <p class="seclabel">OTHER VENUES</p>
   <h2 class="sec">다른 행사장 일정</h2>
   <div class="chips near">{other_venues}</div>
  </section>
@@ -505,7 +527,9 @@ def home(EVS=None):
     ]
     lds = [ld_website(), ld_faq(faq),
            ld_breadcrumb([("홈", DOMAIN+"/")])]
-    faq_html = "".join(f"<details><summary>{q}</summary><div class='a'>{a}</div></details>" for q,a in faq)
+    faq_html = "".join(
+      f"<details><summary><span class='qmark'>Q</span><span class='qtxt'>{q}</span></summary>"
+      f"<div class='a'><span class='amark'>A</span><span>{a}</span></div></details>" for q,a in faq)
     body = f"""{header()}
 <main>
  <section class="hero home">
@@ -532,18 +556,21 @@ def home(EVS=None):
  </section>
 
  <section class="wrap">
+  <p class="seclabel">THIS WEEK</p>
   <h2 class="sec">이번주 열리는 웨딩박람회</h2>
   <p class="sub">지금 신청 가능한 일정입니다. <a href="/이번주-웨딩박람회/">전체 보기</a></p>
   <div class="cards">{week_cards}</div>
  </section>
 
  <section class="wrap">
+  <p class="seclabel">REGIONS</p>
   <h2 class="sec">지역별 웨딩박람회 일정</h2>
   <p class="sub">원하는 지역을 선택하세요.</p>
   <div class="regiongrid">{blocks}</div>
  </section>
 
  <section class="wrap">
+  <p class="seclabel">GUIDE</p>
   <h2 class="sec">결혼준비 가이드</h2>
   <div class="guidegrid">
    <a class="gcard" href="/가이드/웨딩박람회-활용법/"><b>웨딩박람회 200% 활용법</b>
@@ -556,6 +583,7 @@ def home(EVS=None):
  </section>
 
  <section class="wrap">
+  <p class="seclabel">FAQ</p>
   <h2 class="sec">자주 묻는 질문</h2>
   <div class="faq">{faq_html}</div>
  </section>
