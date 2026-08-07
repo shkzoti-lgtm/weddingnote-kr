@@ -183,3 +183,92 @@ footer .chips a:hover{background:var(--gold);color:var(--navy)}
 .wcard{background:var(--soft);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
 .wcard b{display:block;font-size:15px;color:var(--navy);margin-bottom:6px}
 .wcard p{font-size:13.5px;color:#4a5261;line-height:1.65}
+
+/* ══ 디자인 디테일 강화 ══════════════════════════════════ */
+.seclabel{font-size:11px;font-weight:800;letter-spacing:1.6px;color:var(--gold);
+  margin-bottom:6px;text-transform:uppercase}
+h2.sec{position:relative;padding-left:0;border-left:0;font-size:22px;margin-bottom:8px}
+h2.sec:after{content:"";display:block;width:34px;height:3px;background:var(--gold);
+  border-radius:2px;margin-top:10px}
+main section{padding:42px 0}
+
+/* 통계 */
+.stats{gap:12px;margin-top:24px}
+.stats div{padding:14px 12px;transition:.18s;box-shadow:0 1px 2px rgba(18,35,61,.04)}
+.stats div:hover{border-color:var(--gold);transform:translateY(-2px)}
+.stats b{font-size:22px;letter-spacing:-.6px}
+.stats span{font-size:11.5px;margin-top:4px;letter-spacing:-.2px}
+
+/* 개최지 카드 */
+.venues{gap:16px}
+.vcard{position:relative;padding:22px 20px;transition:.2s;overflow:hidden}
+.vcard:before{content:"";position:absolute;top:0;left:0;width:3px;height:100%;
+  background:linear-gradient(180deg,var(--gold) 0%,rgba(200,162,74,.15) 100%)}
+.vcard:hover{border-color:#d4d9e2;box-shadow:0 8px 26px rgba(18,35,61,.09);transform:translateY(-2px)}
+.vcard h3{font-size:17px;letter-spacing:-.3px;margin-bottom:5px}
+.vcard .vloc{display:inline-block;font-size:11.5px;font-weight:700;color:var(--navy);
+  background:#eef1f6;border-radius:999px;padding:4px 11px;margin-bottom:11px;letter-spacing:-.2px}
+.vcard p{font-size:14.5px}
+.vcard .vtip{margin-top:12px;padding-top:11px;font-size:13px;color:#6b7280;
+  border-top:1px solid var(--line);position:relative;padding-left:18px}
+.vcard .vtip:before{content:"→";position:absolute;left:0;top:11px;color:var(--gold);font-weight:800}
+
+/* 참여 3단계 */
+.steps{gap:16px;margin-top:8px}
+.steps li{padding:26px 20px 20px;transition:.2s;background:linear-gradient(180deg,#fff 0%,#fcfcfd 100%)}
+.steps li:hover{border-color:var(--navy);box-shadow:0 8px 24px rgba(18,35,61,.08)}
+.steps li:before{top:-12px;left:20px;padding:4px 12px;font-size:11.5px;letter-spacing:1px;
+  box-shadow:0 2px 8px rgba(18,35,61,.18)}
+.steps b{font-size:16px;letter-spacing:-.3px;margin-bottom:8px}
+.steps span{font-size:14.5px}
+
+/* 신뢰 카드 */
+.whygrid{gap:16px}
+.wcard{position:relative;padding:22px 20px 20px;background:#fff;transition:.2s}
+.wcard i{display:block;font-style:normal;font-size:12px;font-weight:800;color:var(--gold);
+  letter-spacing:1px;margin-bottom:8px}
+.wcard:hover{background:var(--soft);border-color:#d4d9e2}
+.wcard b{font-size:15.5px;letter-spacing:-.3px;margin-bottom:7px}
+.wcard p{font-size:14px}
+
+/* FAQ — Q/A 배지 */
+details{border-radius:10px;margin-bottom:10px;transition:.18s;border-color:var(--line)}
+details:hover{border-color:#d4d9e2}
+details[open]{border-color:var(--navy);box-shadow:0 6px 20px rgba(18,35,61,.07)}
+summary{display:flex;align-items:flex-start;gap:11px;padding:17px 46px 17px 17px}
+summary:after{top:16px;right:18px;font-size:20px;transition:.2s}
+details[open] summary:after{color:var(--navy)}
+.qmark{flex:0 0 22px;width:22px;height:22px;border-radius:50%;background:var(--navy);color:var(--gold-l);
+  font-size:11.5px;font-weight:800;display:grid;place-items:center;margin-top:1px}
+.qtxt{flex:1;font-size:15px;letter-spacing:-.3px;line-height:1.55}
+details[open] .qtxt{color:var(--navy)}
+details .a{display:flex;gap:11px;padding:0 18px 18px 17px;font-size:14.5px;line-height:1.75}
+.amark{flex:0 0 22px;width:22px;height:22px;border-radius:50%;background:#eef1f6;color:var(--navy);
+  font-size:11.5px;font-weight:800;display:grid;place-items:center;margin-top:2px}
+
+/* 체크포인트 / 주의사항 */
+.tips{gap:16px}
+.tip{padding:20px 18px;transition:.2s}
+.tip:hover{border-color:var(--gold);box-shadow:0 6px 20px rgba(200,162,74,.12)}
+.tip h3{font-size:15.5px;letter-spacing:-.3px}
+.cautions{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:6px 20px}
+.cautions li{border-bottom:1px solid var(--line);padding:13px 0 13px 28px}
+.cautions li:last-child{border-bottom:0}
+.cautions li:before{top:15px;width:18px;height:18px;font-size:11.5px}
+
+/* 비교표 */
+.tablewrap{box-shadow:0 2px 10px rgba(18,35,61,.04)}
+caption{padding:16px 18px;font-size:15px;letter-spacing:-.3px;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:#fafbfc}
+td{font-size:14.5px}
+
+/* 인근지역 칩 */
+.near a{padding:8px 15px;font-size:13.5px;font-weight:600;transition:.16s}
+.near a:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(18,35,61,.14)}
+
+@media(max-width:720px){
+  main section{padding:30px 0}
+  h2.sec{font-size:19px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .qtxt{font-size:14.5px}
+}
