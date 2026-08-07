@@ -14,15 +14,32 @@ def _norm_date(s):
     m = re.search(r'(\d{4})\D+(\d{1,2})\D+(\d{1,2})', s)
     return "%s-%02d-%02d" % (m.group(1), int(m.group(2)), int(m.group(3))) if m else ""
 
+def _fetch_tab(sheet_name=None):
+    """구글시트 한 탭을 CSV로 읽어 행 리스트 반환"""
+    import urllib.request, urllib.parse
+    base = "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&t=%d" % (
+        SHEET_ID, int(datetime.datetime.now().timestamp()))
+    if sheet_name:
+        base += "&sheet=" + urllib.parse.quote(sheet_name)
+    txt = urllib.request.urlopen(base, timeout=25).read().decode("utf-8")
+    return list(csv.reader(io.StringIO(txt)))
+
 def fetch_sheet():
-    """시트에서 최신 데이터 가져와 캐시 갱신 (네트워크 필요)"""
-    import urllib.request
-    url = ("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&t=%d"
-           % (SHEET_ID, int(datetime.datetime.now().timestamp())))
-    txt = urllib.request.urlopen(url, timeout=25).read().decode("utf-8")
-    rows = list(csv.reader(io.StringIO(txt)))
+    """시트에서 최신 데이터 가져와 캐시 갱신 (시트1 + 수동추가 탭 병합)"""
+    rows = _fetch_tab()
     if len(rows) < 2: raise RuntimeError("빈 시트")
     hd = [c.strip() for c in rows[0]]
+
+    # '수동추가' 탭이 있으면 이어붙임 (헤더 제외)
+    try:
+        extra = _fetch_tab("수동추가")
+        if len(extra) > 1 and any(c.strip() for c in extra[0]):
+            ehd = [c.strip() for c in extra[0]]
+            if ehd[:2] == hd[:2]:          # 헤더 구조 동일할 때만
+                rows += extra[1:]
+                print("  수동추가 탭: %d건 병합" % (len(extra)-1))
+    except Exception as e:
+        pass
     def ix(n, d):
         return hd.index(n) if n in hd else d
     iR,iN,iS,iE,iP,iIMG,iL = ix('지역',0),ix('행사명',1),ix('시작일',2),ix('종료일',3),ix('장소',4),ix('이미지',6),ix('신청링크',7)
