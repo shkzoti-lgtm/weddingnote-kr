@@ -1,13 +1,18 @@
-/* 정적 카드가 이미 렌더돼 있음. 이 스크립트는 방문자에게만 "최신 상태"를 덧입힘.
-   시트에 새 행사가 추가되면 재배포 전에도 반영되도록 보강하는 역할. */
+/* 정적 카드가 이미 렌더돼 있음. 이 스크립트는 방문자에게 "빌드 이후 추가된 일정"을 보강한다.
+   - 시트1(replyalba) + 수동추가(cpaad) 두 탭을 모두 읽어 병합
+   - 정적 카드보다 결과가 적으면 덮어쓰지 않음 (SEO 콘텐츠 보호) */
 (function(){
   var box=document.getElementById('event-cards');
   if(!box) return;
-  var SHEET_ID='1R_lX8DcKXiHX50SuHrpLCgn1AhTqduAmEl_YhuhLnPI';
-  var URL='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&t='+Date.now();
+  var SHEET='1R_lX8DcKXiHX50SuHrpLCgn1AhTqduAmEl_YhuhLnPI';
+  var staticCount=box.querySelectorAll('.card').length;
   var cities=(box.getAttribute('data-cities')||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
   var multi=cities.length>1, cset={}; cities.forEach(function(c){cset[c]=1;});
 
+  function url(tab){
+    var u='https://docs.google.com/spreadsheets/d/'+SHEET+'/gviz/tq?tqx=out:csv&t='+Date.now();
+    return tab? u+'&sheet='+encodeURIComponent(tab) : u;
+  }
   function parseCSV(t){var rows=[],row=[],cur='',q=false;
     for(var i=0;i<t.length;i++){var c=t[i];
       if(q){ if(c=='"'){ if(t[i+1]=='"'){cur+='"';i++;} else q=false; } else cur+=c; }
@@ -25,35 +30,61 @@
   var DOW=['일','월','화','수','목','금','토'];
   function fmt(k){var d=toD(k); return d? d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+'('+DOW[d.getDay()]+')':'';}
   function fmtS(k){var d=toD(k); return d? pad(d.getMonth()+1)+'.'+pad(d.getDate())+'('+DOW[d.getDay()]+')':'';}
+  function nm(n){return String(n).replace(/\s+/g,'').replace(/[·\/,()\-…\.]/g,'');}
+  function cat(n){n=String(n).replace(/\s+/g,'');
+    if(/허니문|신혼여행/.test(n))return'h'; if(/혼수|가전/.test(n))return'o';
+    if(/드레스/.test(n))return'd'; if(/예물|주얼리|한복|예복/.test(n))return'j';
+    if(/웨딩홀/.test(n))return'l'; return'w';}
 
-  fetch(URL).then(function(r){return r.text();}).then(function(txt){
-    var rows=parseCSV(txt); if(rows.length<2) return;
+  function rowsFrom(txt){
+    var rows=parseCSV(txt); if(rows.length<2) return [];
     var hd=rows[0].map(tr);
     function ix(n,d){var i=hd.indexOf(n);return i>=0?i:d;}
     var iR=ix('지역',0),iN=ix('행사명',1),iS=ix('시작일',2),iE=ix('종료일',3),
-        iP=ix('장소',4),iIMG=ix('이미지',6),iL=ix('신청링크',7);
+        iP=ix('장소',4),iIMG=ix('이미지',6),iL=ix('신청링크',7),iB=hd.indexOf('혜택');
     var t0=new Date(); t0.setHours(0,0,0,0);
-    var items=rows.slice(1).filter(function(r){
-      if(!cset[tr(r[iR])]||!tr(r[iN])) return false;
-      var e=key(r[iE])||key(r[iS]); var d=toD(e); return !d || d>=t0;
+    return rows.slice(1).map(function(r){
+      return {city:tr(r[iR]), name:tr(r[iN]), sk:key(r[iS]), ek:key(r[iE]),
+              place:tr(r[iP]), img:tr(r[iIMG]), link:tr(r[iL])||'/초대권-신청/',
+              ben: iB>=0? tr(r[iB]) : ''};
+    }).filter(function(e){
+      if(!e.city||!e.name||!cset[e.city]) return false;
+      var d=toD(e.ek||e.sk); return !d || d>=t0;
     });
-    if(!items.length) return;                    // 정적 카드 유지
-    items.sort(function(a,b){return key(a[iS]).localeCompare(key(b[iS]));});
-    box.innerHTML=items.map(function(r){
-      var name=tr(r[iN]),place=tr(r[iP]),img=tr(r[iIMG]),link=tr(r[iL])||'/초대권-신청/';
-      var sk=key(r[iS]),ek=key(r[iE]);
-      var dates=fmt(sk)+(ek&&ek!==sk? ' ~ '+fmtS(ek):'');
-      var dd='', d=toD(sk);
+  }
+
+  function fetchTab(tab){
+    return fetch(url(tab)).then(function(r){return r.text();}).then(rowsFrom).catch(function(){return [];});
+  }
+
+  Promise.all([fetchTab(null), fetchTab('수동추가')]).then(function(res){
+    var all=res[0], seenN={}, seenP={};
+    all.forEach(function(e){ seenN[nm(e.name)+'|'+e.sk]=1;
+      seenP[e.city+'|'+e.sk+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name)]=1; });
+    res[1].forEach(function(e){
+      var k1=nm(e.name)+'|'+e.sk, k2=e.city+'|'+e.sk+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name);
+      if(seenN[k1]||seenP[k2]) return;
+      seenN[k1]=1; seenP[k2]=1; all.push(e);
+    });
+    // 정적 카드보다 적으면 덮어쓰지 않음
+    if(all.length < staticCount) return;
+    all.sort(function(a,b){return a.sk.localeCompare(b.sk);});
+    var t0=new Date(); t0.setHours(0,0,0,0);
+    box.innerHTML=all.map(function(e){
+      var dates=fmt(e.sk)+(e.ek&&e.ek!==e.sk? ' ~ '+fmtS(e.ek):'');
+      var dd='', d=toD(e.sk);
       if(d){var diff=Math.ceil((d-t0)/86400000);
-        dd = diff>0&&diff<=30 ? '<span class="dday">D-'+diff+'</span>' : (diff<=0?'<span class="dday now">진행중</span>':'');}
-      var ct=multi? '<span class="ctag">'+esc(tr(r[iR]))+'</span>':'';
-      var media=img? '<a class="poster" href="'+esc(link)+'" target="_blank" rel="noopener nofollow sponsored"><img src="'+esc(img)+'" alt="'+esc(name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
+        dd = diff>0&&diff<=30 ? '<span class="dday">D-'+diff+'</span>'
+           : (diff<=0?'<span class="dday now">진행중</span>':'');}
+      var ct=multi? '<span class="ctag">'+esc(e.city)+'</span>':'';
+      var media=e.img? '<a class="poster" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
+      var ben=e.ben? '<div class="benefit">혜택 '+esc(e.ben)+'</div>':'';
       return '<article class="card">'+media+'<div class="body"><div class="tags">'+
         '<span class="status">모집중</span>'+ct+dd+'</div>'+
-        '<h3>'+esc(name)+'</h3><div class="meta">일정 '+esc(dates)+'</div>'+
-        (place?'<div class="meta">장소 '+esc(place)+'</div>':'')+
-        '<a class="cta" href="'+esc(link)+'" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>'+
+        '<h3>'+esc(e.name)+'</h3><div class="meta">일정 '+esc(dates)+'</div>'+
+        (e.place?'<div class="meta">장소 '+esc(e.place)+'</div>':'')+ben+
+        '<a class="cta" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>'+
         '</div></article>';
     }).join('');
-  }).catch(function(){});   // 실패 시 정적 카드 그대로
+  }).catch(function(){});
 })();
