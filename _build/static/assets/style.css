@@ -272,3 +272,17 @@ td{font-size:14.5px}
   .stats{grid-template-columns:repeat(2,1fr)}
   .qtxt{font-size:14.5px}
 }
+
+/* 행사 상세 — 지도 링크 / 신청 박스 */
+.maplinks{display:flex;flex-wrap:wrap;gap:10px}
+.maplinks a{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;
+  border-radius:8px;padding:11px 18px;font-size:14px;font-weight:700;color:var(--navy);transition:.18s}
+.maplinks a:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--gold)}
+.maplinks a:hover{border-color:var(--navy);background:var(--navy);color:#fff;transform:translateY(-1px)}
+.maplinks a:hover:before{background:var(--gold-l)}
+.applybox{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;
+  border-radius:var(--radius);padding:32px 28px;text-align:center}
+.applybox h2{font-size:20px;font-weight:800;margin-bottom:10px;letter-spacing:-.3px}
+.applybox p{font-size:14.5px;color:#c9d3e2;max-width:560px;margin:0 auto 20px;line-height:1.75}
+.applybox .btn{background:var(--gold);color:var(--navy)}
+.applybox .btn:hover{background:#fff;color:var(--navy)}

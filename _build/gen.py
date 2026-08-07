@@ -278,8 +278,55 @@ def ld_event(e):
                 "availability":"https://schema.org/InStock","url":e["link"]},
       "organizer":{"@type":"Organization","name":SITE}}, ensure_ascii=False)
 
+
+# ── 행사 상세 보조 함수 ─────────────────────────────────────
+def map_links(place):
+    q = quote(place)
+    return ('<a href="https://map.naver.com/p/search/%s" target="_blank" rel="noopener">네이버 지도</a>'
+            '<a href="https://map.kakao.com/?q=%s" target="_blank" rel="noopener">카카오맵</a>'
+            '<a href="https://www.google.com/maps/search/?api=1&query=%s" target="_blank" rel="noopener">구글 지도</a>'
+            % (q, q, q))
+
+def district_of(place):
+    m = re.search(r'([가-힣]+(?:구|시|군))\s', place + " ")
+    return m.group(1) if m else ""
+
+def location_text(e):
+    d = district_of(e["place"])
+    desc = DISTRICT_DESC.get(d, "")
+    t = "%s 일대에서 진행됩니다." % e["place"]
+    if d: t += " 행정구역상 %s에 해당합니다." % d
+    if desc: t += " %s입니다." % desc
+    return t
+
+MONTH_NOTE = {
+ 1:"연초 결혼 준비를 시작하는 예비부부가 많이 찾는 시기입니다.",
+ 2:"봄 예식을 앞두고 막바지 준비를 정리하기 좋은 시기입니다.",
+ 3:"봄 성수기를 앞두고 참여 업체가 늘어나는 시기입니다.",
+ 4:"봄 예식 시즌과 맞물려 규모가 큰 박람회가 몰리는 시기입니다.",
+ 5:"가을 예식을 준비하는 예비부부의 방문이 많은 시기입니다.",
+ 6:"여름 비수기를 앞두고 혜택이 강화되는 경우가 많습니다.",
+ 7:"여름 휴가철 전 준비를 마무리하기 좋은 시기입니다.",
+ 8:"가을 성수기 예식을 준비하기에 적절한 시기입니다.",
+ 9:"가을 예식 시즌과 함께 참여 업체가 가장 많아지는 시기입니다.",
+ 10:"내년 봄 예식을 준비하는 예비부부가 많이 찾습니다.",
+ 11:"연말 프로모션과 함께 혜택이 커지는 시기입니다.",
+ 12:"연말·연초 계약 혜택을 노리기 좋은 시기입니다.",
+}
+def intro_text(e):
+    d1 = EV.fmt(e["start"]); d2 = EV.fmt(e["end"])
+    span = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
+    t = "%s 진행되는 「%s」의 일정과 정보를 정리했습니다. " % (span, e["name"])
+    t += MONTH_NOTE.get(e["start"].month, "") + " "
+    t += "웨딩홀과 스튜디오·드레스·메이크업, 예물과 혼수, 신혼여행까지 여러 업체를 한자리에서 상담할 수 있습니다."
+    if e.get("benefit"): t += " 이번 회차에는 %s 혜택이 안내되고 있습니다." % e["benefit"]
+    return t
+
+def is_weekday(e):
+    return e["start"].weekday() < 5 and e["start"] == e["end"]
+
 # ── 개별 행사 상세 페이지 ────────────────────────────────────────
-def event_page(e, same_city):
+def event_page(e, same_city, all_evs=None):
     path = "/행사/%s/" % e["slug"]; url = DOMAIN + path
     region = region_of_city(e["city"])
     d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
@@ -295,15 +342,31 @@ def event_page(e, same_city):
     others = [x for x in same_city if x["slug"] != e["slug"]][:6]
     rel = "".join('<li><a href="/행사/%s/">%s <span>%s</span></a></li>'
                   % (quote(x["slug"]), esc(x["name"]), EV.fmt_short(x["start"])) for x in others)
+    _wk = []
+    for x in (all_evs or []):
+        if x["slug"] == e["slug"] or x["city"] == e["city"]: continue
+        if abs((x["start"] - e["start"]).days) <= 3: _wk.append(x)
+    week_rel = "".join('<li><a href="/행사/%s/">%s <span>%s · %s</span></a></li>'
+                       % (quote(x["slug"]), esc(x["name"]), esc(x["city"]), EV.fmt_short(x["start"]))
+                       for x in _wk[:6])
+    _wd = is_weekday(e)
     faq = [
-      ("%s 입장료가 있나요?" % e["name"],
-       "무료 초대권을 사전 신청하면 무료로 입장할 수 있습니다. 사전 예약자에게는 우선 상담과 방문 선물 등 혜택이 제공되는 경우가 많습니다."),
-      ("%s은 어디에서 열리나요?" % e["name"],
-       "%s에서 열립니다. 방문 전 주차 여건과 대중교통 동선을 확인하면 좋습니다." % e["place"]),
-      ("%s 방문 전 무엇을 준비하면 좋나요?" % e["name"],
-       "총 예산 상한선과 희망 예식 날짜 1~3순위를 정리해 가면 상담이 훨씬 빠릅니다. 커플이 함께 방문하는 것을 권합니다."),
+      ("%s은 언제 열리나요?" % e["name"],
+       "%s에 진행됩니다. %s" % (dates,
+         "평일 일정이라 비교적 한산하게 부스를 둘러볼 수 있습니다." if _wd
+         else "주말 일정이라 참여 업체와 사은품이 많은 편이며, 오전 방문이 대기가 짧습니다.")),
+      ("행사장은 어디인가요?",
+       "%s에서 진행됩니다. %s" % (e["place"],
+         DISTRICT_DESC.get(district_of(e["place"]), "방문 전 주차 여건과 대중교통 동선을 확인하면 좋습니다.") + ("입니다." if DISTRICT_DESC.get(district_of(e["place"])) else ""))),
+      ("무료 초대권은 어떻게 받나요?",
+       "이 페이지의 「무료 초대권 신청하기」를 누르면 운영사 공식 신청 페이지로 이동합니다. 이름과 연락처를 남기면 초대권이 발급되며 별도 비용은 없습니다."),
+      ("초대권으로 어떤 혜택을 받을 수 있나요?",
+       (("이번 회차 안내 혜택은 %s입니다. " % e["benefit"]) if e.get("benefit") else "") +
+       "일반적으로 현장 계약 시 스드메 패키지 할인, 예식장 식대 혜택, 혼수 견적 비교, 방문 사은품 등이 제공됩니다. 혜택은 회차와 업체에 따라 달라집니다."),
+      ("예식 날짜가 아직 정해지지 않았어도 방문할 수 있나요?",
+       "네, 가능합니다. 박람회는 정보 수집 단계에서 방문하는 분이 가장 많습니다. 예식 예정 월만 대략 정해 두어도 견적 비교와 식장 답사에 충분히 활용할 수 있습니다."),
       ("현장에서 꼭 계약해야 하나요?",
-       "아닙니다. 견적만 받고 비교한 뒤 결정해도 됩니다. 다만 인기 예식장 날짜는 조기 마감될 수 있습니다."),
+       "아닙니다. 견적만 받고 비교한 뒤 결정해도 됩니다. 다만 인기 예식장의 날짜는 조기 마감될 수 있어 일정 확인은 서두르는 편이 좋습니다."),
     ]
     faq_html = "".join("<details><summary><span class='qmark'>Q</span><span class='qtxt'>%s</span></summary>"
                        "<div class='a'><span class='amark'>A</span><span>%s</span></div></details>" % (q,a) for q,a in faq)
@@ -341,6 +404,20 @@ def event_page(e, same_city):
   </div>
  </section>
  <section class="wrap">
+  <p class="seclabel">ABOUT</p>
+  <h2 class="sec">{esc(e['name'])} 안내</h2>
+  <p class="para">{esc(intro_text(e))}</p>
+ </section>
+
+ <section class="wrap">
+  <p class="seclabel">LOCATION</p>
+  <h2 class="sec">위치 안내</h2>
+  <p class="para">{esc(location_text(e))}</p>
+  <p class="sub">방문 전 정확한 위치를 지도에서 확인해 보세요.</p>
+  <div class="maplinks">{map_links(e['place'])}</div>
+ </section>
+
+ <section class="wrap">
   <p class="seclabel">CHECKPOINT</p>
   <h2 class="sec">방문 전 체크포인트</h2>
   <ul class="cautions">
@@ -350,7 +427,17 @@ def event_page(e, same_city):
    <li>취소 시점별 위약금과 예식일 변경 규정을 미리 확인하세요.</li>
   </ul>
  </section>
- {('<section class="wrap"><h2 class="sec">'+esc(e['city'])+' 다른 웨딩박람회 일정</h2><ul class="rellist">'+rel+'</ul></section>') if rel else ''}
+ {('<section class="wrap"><p class="seclabel">NEARBY</p><h2 class="sec">'+esc(e['city'])+' 다른 웨딩박람회 일정</h2><ul class="rellist">'+rel+'</ul></section>') if rel else ''}
+ {('<section class="wrap"><p class="seclabel">SAME WEEK</p><h2 class="sec">같은 주 다른 지역 박람회</h2><ul class="rellist">'+week_rel+'</ul></section>') if week_rel else ''}
+
+ <section class="wrap">
+  <div class="applybox">
+   <h2>무료 초대권 신청</h2>
+   <p>{esc(e['name'])}는 입장료 없이 무료 초대권만으로 입장할 수 있습니다.
+      현장 계약 의무는 없으며, 정보 수집 목적으로 방문하셔도 좋습니다.</p>
+   <a class="btn big" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청 페이지로 이동</a>
+  </div>
+ </section>
  <section class="wrap"><p class="seclabel">FAQ</p><h2 class="sec">자주 묻는 질문</h2><div class="faq">{faq_html}</div></section>
 </main>
 {footer()}"""
@@ -766,7 +853,7 @@ if __name__ == "__main__":
         loc_page(loc, region, path, evs_for(loc), len(EVS))
 
     # 개별 행사 페이지
-    for e in EVS: event_page(e, by_city.get(e["city"], []))
+    for e in EVS: event_page(e, by_city.get(e["city"], []), EVS)
     # 행사장 페이지
     vmap = {}
     for e in EVS:
