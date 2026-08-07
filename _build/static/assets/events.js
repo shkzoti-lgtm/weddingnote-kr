@@ -31,6 +31,12 @@
   function fmt(k){var d=toD(k); return d? d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+'('+DOW[d.getDay()]+')':'';}
   function fmtS(k){var d=toD(k); return d? pad(d.getMonth()+1)+'.'+pad(d.getDate())+'('+DOW[d.getDay()]+')':'';}
   function nm(n){return String(n).replace(/\s+/g,'').replace(/[·\/,()\-…\.]/g,'');}
+  function slugify(n){
+    var t=String(n).normalize('NFC').trim();
+    t=t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'');
+    return t.slice(0,60);
+  }
+  function detailUrl(e){ return '/행사/'+encodeURIComponent(slugify(e.name)+'-'+e.sk)+'/'; }
   function cat(n){n=String(n).replace(/\s+/g,'');
     if(/허니문|신혼여행/.test(n))return'h'; if(/혼수|가전/.test(n))return'o';
     if(/드레스/.test(n))return'd'; if(/예물|주얼리|한복|예복/.test(n))return'j';
@@ -77,13 +83,15 @@
         dd = diff>0&&diff<=30 ? '<span class="dday">D-'+diff+'</span>'
            : (diff<=0?'<span class="dday now">진행중</span>':'');}
       var ct=multi? '<span class="ctag">'+esc(e.city)+'</span>':'';
-      var media=e.img? '<a class="poster" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
+      var du=detailUrl(e);
+      var media=e.img? '<a class="poster" href="'+du+'"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
       var ben=e.ben? '<div class="benefit">혜택 '+esc(e.ben)+'</div>':'';
       return '<article class="card">'+media+'<div class="body"><div class="tags">'+
         '<span class="status">모집중</span>'+ct+dd+'</div>'+
-        '<h3>'+esc(e.name)+'</h3><div class="meta">일정 '+esc(dates)+'</div>'+
+        '<h3><a href="'+du+'">'+esc(e.name)+'</a></h3><div class="meta">일정 '+esc(dates)+'</div>'+
         (e.place?'<div class="meta">장소 '+esc(e.place)+'</div>':'')+ben+
         '<a class="cta" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>'+
+        '<a class="detail" href="'+du+'">박람회 정보 자세히 보기</a>'+
         '</div></article>';
     }).join('');
   }).catch(function(){});
