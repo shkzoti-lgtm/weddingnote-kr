@@ -91,9 +91,17 @@ def faqs_for(loc):
       "아닙니다. 여러 박람회를 비교한 뒤 결정해도 늦지 않습니다. 다만 인기 예식장 날짜는 조기 마감될 수 있어 일정 확인은 서두르는 편이 좋습니다."),
      ("계약할 때 무엇을 확인해야 하나요?",
       "촬영 원본·수정본 비용, 드레스 피팅비와 헬퍼비, 예식장 수수료 포함 여부를 확인하고 구두 약속은 계약서 특약란에 남겨야 합니다."),
+     ("사전 신청은 언제까지 해야 하나요?",
+      "대부분 행사 당일 오전까지 가능하지만 인기 박람회는 정원이 조기 마감됩니다. 2~3일 전에 신청하면 원하는 시간대를 배정받기 수월합니다."),
+     ("주차는 어떤가요?",
+      "컨벤션센터와 대형 쇼핑몰은 자체 주차장이 있고 박람회 방문 시 할인되는 경우가 많습니다. 백화점 행사장은 주말 혼잡하니 대중교통을 권합니다."),
+     ("평일과 주말 중 언제 가는 게 좋나요?",
+      "주말은 참여 업체와 사은품이 많고, 평일은 한산해 담당자와 여유롭게 상담할 수 있습니다. 시간이 된다면 평일 오전 방문이 가장 효율적입니다."),
+     ("신청하면 이 사이트가 개인정보를 보관하나요?",
+      "아닙니다. 이 사이트는 일정 안내만 하며 신청은 각 박람회 운영사 공식 페이지에서 진행됩니다. 입력한 정보는 운영사가 관리합니다."),
     ]
 
-def loc_page(loc, region, path, my_evs=None):
+def loc_page(loc, region, path, my_evs=None, total_ev=0):
     url = DOMAIN + path
     is_hub = (loc == region)
     r = rnd_for(loc)
@@ -124,6 +132,22 @@ def loc_page(loc, region, path, my_evs=None):
                          for c in near)
 
     my_evs = my_evs or []
+    # 개최지 카드 (이 지역 행사들의 실제 행사장에서 추출)
+    _vs, _seen = [], set()
+    for _e in my_evs:
+        _v = EV.venue_of(_e)
+        if _v and _v not in _seen:
+            _seen.add(_v); _vs.append(_v)
+    if not _vs: _vs = [v for v in VENUE_INFO if VENUE_INFO[v][0].find(loc) >= 0][:3]
+    venue_cards = "".join(
+        '<div class="vcard"><h3>%s</h3><p class="vloc">%s</p><p>%s</p><p class="vtip">%s</p></div>'
+        % (esc(v), esc(VENUE_INFO[v][0]), esc(VENUE_INFO[v][1]),
+           esc(VENUE_INFO[v][3] if len(VENUE_INFO[v]) > 3 else VENUE_INFO[v][2]))
+        for v in _vs[:6] if v in VENUE_INFO) or \
+        '<div class="vcard"><h3>%s 지역 행사장</h3><p>%s에서는 컨벤션센터와 백화점 특별행사장을 중심으로 박람회가 열립니다. 정확한 위치는 각 일정 카드에서 확인하세요.</p></div>' % (esc(loc), esc(loc))
+    steps_html = "".join('<li><b>%s</b><span>%s</span></li>' % (esc(t), esc(d)) for t, d in HOW_STEPS)
+    why_html = "".join('<div class="wcard"><b>%s</b><p>%s</p></div>' % (esc(t), esc(d)) for t, d in WHY_US)
+
     static_cards = cards_html(my_evs, show_city=bool(cs),
         empty=f"{loc} 지역 일정을 준비 중입니다. 새로운 일정이 확정되면 이곳에 바로 표시됩니다.")
     ev_count = len(my_evs)
@@ -144,7 +168,12 @@ def loc_page(loc, region, path, my_evs=None):
    <h1>{loc} 웨딩박람회 일정</h1>
    <p class="lead">{intro} {loc}에서 열리는 웨딩박람회·결혼박람회·허니문박람회 일정과
     무료 초대권 정보를 매일 갱신해 정리합니다.</p>
-   <div class="badges"><span>매일 일정 갱신</span><span>무료 초대권</span><span>사전예약 안내</span></div>
+   <div class="stats">
+     <div><b>{ev_count}</b><span>{loc} 진행 예정</span></div>
+     <div><b>{total_ev}</b><span>전국 등록 일정</span></div>
+     <div><b>100%</b><span>무료 초대권</span></div>
+     <div><b>{TODAY}</b><span>최근 갱신</span></div>
+   </div>
   </div>
  </section>
 
@@ -157,8 +186,20 @@ def loc_page(loc, region, path, my_evs=None):
  </section>
 
  <section class="wrap">
+  <h2 class="sec">{loc} 주요 박람회 개최지</h2>
+  <p class="sub">자주 이용되는 행사장의 위치와 특징입니다.</p>
+  <div class="venues">{venue_cards}</div>
+ </section>
+
+ <section class="wrap">
   <h2 class="sec">{loc} 웨딩박람회 유형 비교</h2>
   {compare_table(loc)}
+ </section>
+
+ <section class="wrap">
+  <h2 class="sec">참여 방법 3단계</h2>
+  <p class="sub">처음 방문하는 예비부부도 어렵지 않습니다.</p>
+  <ol class="steps">{steps_html}</ol>
  </section>
 
  <section class="wrap">
@@ -169,6 +210,11 @@ def loc_page(loc, region, path, my_evs=None):
  <section class="wrap">
   <h2 class="sec">{loc} 계약 전 주의사항</h2>
   <ul class="cautions">{caution_html}</ul>
+ </section>
+
+ <section class="wrap">
+  <h2 class="sec">웨딩노트가 정리하는 방식</h2>
+  <div class="whygrid">{why_html}</div>
  </section>
 
  <section class="wrap">
@@ -689,7 +735,7 @@ if __name__ == "__main__":
 
     home(EVS)
     for loc, region, path in ALL_LOCS:
-        loc_page(loc, region, path, evs_for(loc))
+        loc_page(loc, region, path, evs_for(loc), len(EVS))
 
     # 개별 행사 페이지
     for e in EVS: event_page(e, by_city.get(e["city"], []))
