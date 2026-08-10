@@ -1,3 +1,28 @@
+/* ── 즉시 실행: 레이아웃 교정 (gen.py 재배포 없이도 동작) ── */
+(function(){
+  // 1) AEO 안내 블록을 '최신 일정' 섹션 뒤로 이동
+  try{
+    var main=document.querySelector('main');
+    var aeoSec=null, schedSec=null, secs=main? main.children : [];
+    for(var i=0;i<secs.length;i++){
+      var sec=secs[i];
+      if(!aeoSec && sec.querySelector && sec.querySelector('.aeo')) aeoSec=sec;
+      if(!schedSec && sec.querySelector && sec.querySelector('#event-cards')) schedSec=sec;
+    }
+    if(aeoSec && schedSec && aeoSec.compareDocumentPosition(schedSec) & Node.DOCUMENT_POSITION_FOLLOWING){
+      schedSec.parentNode.insertBefore(aeoSec, schedSec.nextSibling);
+    }
+  }catch(e){}
+  // 2) '자세히 보기' 버튼 스타일 주입
+  try{
+    var st=document.createElement('style');
+    st.textContent='.card .detail{display:block;text-align:center;margin-top:9px;padding:9px;'
+      +'font-size:13px;font-weight:600;color:#5f6672;border:1px solid #e6e8ec;border-radius:7px;'
+      +'transition:.16s}.card .detail:hover{color:#12233d;border-color:#12233d;background:#f6f7f9}';
+    document.head.appendChild(st);
+  }catch(e){}
+})();
+
 /* 정적 카드가 이미 렌더돼 있음. 이 스크립트는 방문자에게 "빌드 이후 추가된 일정"을 보강한다.
    - 시트1(replyalba) + 수동추가(cpaad) 두 탭을 모두 읽어 병합
    - 정적 카드보다 결과가 적으면 덮어쓰지 않음 (SEO 콘텐츠 보호) */
@@ -95,4 +120,24 @@
         '</div></article>';
     }).join('');
   }).catch(function(){});
+})();
+
+/* ── 정적 카드에 '자세히 보기' 버튼 보강 (JS 렌더 전에도 표시) ── */
+(function(){
+  function slugify2(n){
+    var t=String(n).normalize('NFC').trim();
+    return t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    var box=document.getElementById('event-cards'); if(!box) return;
+    box.querySelectorAll('.card').forEach(function(c){
+      if(c.querySelector('.detail')) return;
+      var a=c.querySelector('h3 a'), body=c.querySelector('.body');
+      if(!a || !body) return;
+      var d=document.createElement('a');
+      d.className='detail'; d.href=a.getAttribute('href');
+      d.textContent='박람회 정보 자세히 보기';
+      body.appendChild(d);
+    });
+  });
 })();
