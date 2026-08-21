@@ -79,28 +79,35 @@ def ld_itemlist(loc, rows):
       "itemListElement":[{"@type":"ListItem","position":i+1,"name":n} for i,n in enumerate(rows)]},
       ensure_ascii=False)
 
+import evdata as ED
+
 def aeo_block(loc, region):
-    """일정 아래 — 신청 방법·주의사항 상세 (AEO 3종 세트 완성)"""
+    """AEO 답변 블록 — 지역 해시로 문항·답변·절차를 다르게 배정한다."""
+    v = VENUE.get(loc, "주요 컨벤션센터와 백화점 특별행사장")
+    q     = ED.pick(ED.AEO_Q,      loc, "aq").format(loc=loc)
+    ans   = ED.pick(ED.AEO_ANS,    loc, "aa").format(loc=loc, v=v)
+    sh    = ED.pick(ED.AEO_STEP_H, loc, "ah")
+    steps = ED.pick(ED.AEO_STEPS,  loc, "as")
+    note  = ED.pick(ED.AEO_NOTE,   loc, "an")
+    li = "".join("<li>%s</li>" % s.format(loc=loc) for s in steps)
     return f"""<div class="aeo">
-  <h2>{loc} 웨딩박람회 무료 초대권, 어떻게 신청하나요?</h2>
-  <p class="ans">{loc} 웨딩박람회는 대부분 <b>무료 초대권 사전 신청</b>으로 입장합니다.
-  사전 예약자에게는 우선 상담과 방문 선물 같은 혜택이 제공되는 경우가 많아, 방문 전에 미리 신청하는 편이 유리합니다.</p>
-  <p class="ans-sub"><b>신청 방법</b></p>
-  <ol>
-    <li>위 {loc} 일정 목록에서 방문할 박람회를 고릅니다.</li>
-    <li>초대권 신청 버튼을 눌러 이름과 연락처를 남깁니다.</li>
-    <li>예산 상한과 희망 예식 날짜를 정리해 커플이 함께 방문합니다.</li>
-  </ol>
-  <p class="pnote">※ 일정과 혜택은 주최 측 사정에 따라 변경될 수 있으며, 실제 견적은 상담 조건에 따라 달라집니다.</p>
+  <h2>{q}</h2>
+  <p class="ans">{ans}</p>
+  <p class="ans-sub"><b>{sh}</b></p>
+  <ol>{li}</ol>
+  <p class="pnote">{note}</p>
 </div>"""
 
 def compare_table(loc):
+    cap = ED.pick(ED.CMP_CAP, loc, "cc").format(loc=loc)
+    hd  = ED.pick(ED.CMP_HEAD, loc, "ch")
+    order = ED.sample(list(range(len(ED.CMP_ROWS))), loc, len(ED.CMP_ROWS), "cr")
+    rows = ""
+    for i in order:
+        name, size, feats, fors = ED.CMP_ROWS[i]
+        rows += "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>" % (
+            name, size, ED.pick(feats, loc, "cf%d" % i), ED.pick(fors, loc, "ct%d" % i))
     return f"""<div class="tablewrap"><table>
-<caption>{loc} 웨딩박람회 유형별 비교</caption>
-<thead><tr><th>유형</th><th>규모</th><th>특징</th><th>이런 분께</th></tr></thead>
-<tbody>
-<tr><td>컨벤션센터형</td><td>대형</td><td>참여 업체가 많아 한 번에 비교 가능</td><td>처음 준비를 시작한 예비부부</td></tr>
-<tr><td>백화점·몰형</td><td>중형</td><td>접근성이 좋고 브랜드 중심 상담</td><td>퇴근 후·주말 짧게 둘러볼 분</td></tr>
-<tr><td>업체 사옥형</td><td>소형</td><td>대기가 짧고 상담이 밀착형</td><td>구체적 견적을 원하는 분</td></tr>
-<tr><td>허니문·혼수 특화</td><td>중형</td><td>신혼여행·가전 중심 구성</td><td>예식장은 정한 분</td></tr>
-</tbody></table></div>"""
+<caption>{cap}</caption>
+<thead><tr><th>{hd[0]}</th><th>{hd[1]}</th><th>{hd[2]}</th><th>{hd[3]}</th></tr></thead>
+<tbody>{rows}</tbody></table></div>"""
