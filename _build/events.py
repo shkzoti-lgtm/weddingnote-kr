@@ -130,7 +130,10 @@ def fetch_sheet():
     return len(out)
 
 def slugify(name):
-    s = unicodedata.normalize("NFC", name).strip()
+    """URL 슬러그. 넷리파이가 대문자 경로를 소문자로 301 리다이렉트하기 때문에
+       처음부터 소문자로 만든다. (대문자 슬러그는 canonical 과 실제 URL 이 어긋나
+       네이버에서 '수집제한(리다이렉션된 페이지)'으로 잡힌다)"""
+    s = unicodedata.normalize("NFC", name).strip().lower()
     s = re.sub(r'[^\w가-힣]+', '-', s).strip('-')
     return s[:60]
 

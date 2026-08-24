@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """신규 B사이트 생성기 — 한글 클린URL + 문서 SEO 전면 적용
    실행: python3 gen.py     출력: ../site/"""
-import os, re, json, html, random, datetime, shutil
+import os, re, json, html, random, datetime, shutil, hashlib
 from urllib.parse import quote
 from data import *
 from seo import *
@@ -24,6 +24,48 @@ def enc_url(u):
     m = re.match(r'^(https?://[^/]+)(/.*)?$', u)
     host, path = m.group(1), m.group(2) or "/"
     return html.escape(host + quote(path, safe="/-_.~"))
+
+# ── 사이트맵 lastmod 를 '실제로 바뀐 날'로 관리 ──────────────────────
+# 전 페이지에 매일 오늘 날짜를 찍으면 "매일 전부 바뀐다"는 거짓 신호가 되어
+# 검색엔진이 lastmod 를 무시하고 수집을 줄인다. 그래서 페이지 본문 해시를
+# 비교해 내용이 그대로면 지난 lastmod 를 유지한다.
+# 지난 해시는 라이브 사이트의 /_pagehash.json 에서 읽어 온다(자체 순환).
+PREV_HASH = {}
+
+def load_prev_hash():
+    import urllib.request
+    try:
+        raw = urllib.request.urlopen(DOMAIN + "/_pagehash.json", timeout=20).read()
+        d = json.loads(raw.decode("utf-8"))
+        if isinstance(d, dict):
+            PREV_HASH.update(d)
+            print("  이전 페이지 해시: %d건" % len(d))
+    except Exception as e:
+        print("  이전 페이지 해시 없음 → 이번 빌드는 전부 오늘 날짜 (%s)" % type(e).__name__)
+
+_VOLATILE = [
+    (re.compile(r"<b>\d+\.\d+</b><span>최근 갱신</span>"), ""),   # 히어로의 '최근 갱신 8.24'
+    (re.compile(r"D-\d+"), "D"),                                   # 디데이 배지
+    (re.compile(r"\d{4}-\d{2}-\d{2}"), ""),                       # 본문에 박히는 날짜
+]
+
+def content_key(text):
+    for rx, rep in _VOLATILE:
+        text = rx.sub(rep, text)
+    return hashlib.md5(text.encode("utf-8")).hexdigest()
+
+def _file_of(u):
+    rel = u[len(DOMAIN):].strip("/")
+    return os.path.join(OUT, rel, "index.html") if rel else os.path.join(OUT, "index.html")
+
+def changefreq_of(u):
+    rel = u[len(DOMAIN):]
+    if rel == "/" or rel.startswith(("/일정", "/이번주")): return "daily"
+    if rel.startswith("/행사/"):   return "weekly"   # 개별 행사 상세는 거의 안 바뀐다
+    if rel.startswith("/행사장/"): return "weekly"
+    if rel.startswith("/가이드/"): return "monthly"
+    if rel.count("/") <= 3: return "daily"           # 지역 페이지 — 일정이 매일 바뀐다
+    return "weekly"
 
 def rnd_for(key):
     return random.Random(sum(ord(c)*(i+7) for i,c in enumerate(key)) * 7331 + 13)
@@ -1033,16 +1075,32 @@ if __name__ == "__main__":
     for s,t,k in ARTICLES: article_page(s,t,k)
     apply_page(); thanks_page(); privacy_page()
 
-    # sitemap (lastmod=당일, changefreq=daily, 퍼센트인코딩)
+    # sitemap — lastmod 는 내용이 실제로 바뀐 날, changefreq 는 페이지 성격별
+    load_prev_hash()
+    cur_hash, changed = {}, 0
     sm = ['<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for u in URLS:
+        try:
+            h = content_key(open(_file_of(u), encoding="utf-8").read())
+        except Exception:
+            h = ""
+        old = PREV_HASH.get(u) or {}
+        if h and old.get("h") == h and old.get("d"):
+            lm = old["d"]
+        else:
+            lm = TODAY; changed += 1
+        cur_hash[u] = {"h": h, "d": lm}
         pr = "1.0" if u==DOMAIN+"/" else ("0.9" if u.count("/")<=4 else "0.8")
-        sm.append('<url><loc>%s</loc><lastmod>%s</lastmod><changefreq>daily</changefreq><priority>%s</priority></url>'
-                  % (enc_url(u), TODAY, pr))
+        sm.append('<url><loc>%s</loc><lastmod>%s</lastmod><changefreq>%s</changefreq><priority>%s</priority></url>'
+                  % (enc_url(u), lm, changefreq_of(u), pr))
     sm.append('</urlset>')
     w("sitemap.xml", "\n".join(sm))
-    w("robots.txt", "User-agent: *\nAllow: /\nDisallow: /_cpaad-status.txt\n\nSitemap: %s/sitemap.xml\n" % DOMAIN)
+    w("_pagehash.json", json.dumps(cur_hash, ensure_ascii=False))
+    print("  sitemap: 전체 %d건 / 내용 변경 %d건" % (len(URLS), changed))
+    w("robots.txt", "User-agent: *\nAllow: /\n"
+      "Disallow: /_cpaad-status.txt\nDisallow: /_pagehash.json\nDisallow: /_urls.txt\n"
+      "\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
     pd = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
