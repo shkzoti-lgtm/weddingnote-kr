@@ -129,7 +129,7 @@
     // 정적 카드보다 적으면 덮어쓰지 않음
     if(all.length < staticCount) return;
     all.sort(function(a,b){
-      if(a.always!==b.always) return a.always?1:-1;
+      if(a.always!==b.always) return a.always?-1:1;   // 상시를 맨 위로
       return String(a.sk).localeCompare(String(b.sk));
     });
     var t0=new Date(); t0.setHours(0,0,0,0);
