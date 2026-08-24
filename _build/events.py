@@ -9,6 +9,26 @@ CACHE = os.path.join(HERE, "events_cache.psv")
 BANNER = "https://replyalba.com/banner/"
 PT = "https://replyalba.com/pt/"
 
+ALWAYS_WORDS = ("상시", "상시진행", "상시모집", "연중", "수시")
+
+def _always_label(start, end, status):
+    """상시 행사인지 판별하고 화면에 쓸 문구를 돌려준다.
+       시트의 날짜 칸이 서식 때문에 텍스트를 못 받는 경우가 있어
+       '상태' 칸으로도 지정할 수 있게 열어 둔다.
+         · 시작일 = 상시        / 종료일 = 매주 토요일·일요일
+         · 상태  = 상시 · 매주 토요일·일요일   (날짜 칸은 비워도 됨)
+       상시가 아니면 None."""
+    st = (start or "").strip()
+    en = (end or "").strip()
+    sc = (status or "").strip()
+    if st in ALWAYS_WORDS:
+        return en or "상시 진행"
+    for w in ALWAYS_WORDS:
+        if sc.startswith(w):
+            tail = sc[len(w):].lstrip(" ·-—|/")
+            return tail or en or "상시 진행"
+    return None
+
 def _strip_prefix(prefix, v):
     """알려진 접두어로 시작할 때만 떼어낸다. 문자열 중간은 건드리지 않는다."""
     v = (v or "").strip()
@@ -58,14 +78,21 @@ def fetch_sheet():
         return hd.index(n) if n in hd else d
     iR,iN,iS,iE,iP,iIMG,iL = ix('지역',0),ix('행사명',1),ix('시작일',2),ix('종료일',3),ix('장소',4),ix('이미지',6),ix('신청링크',7)
     iB = hd.index('혜택') if '혜택' in hd else -1
+    iST = ix('상태', 5)
     out = []
     for r in rows[1:]:
         if len(r) <= iL or not r[iN].strip(): continue
         img  = _strip_prefix(BANNER, r[iIMG])
         link = _strip_prefix(PT, r[iL])
         ben = r[iB].strip().replace("|"," ") if (iB >= 0 and len(r) > iB) else ""
+        _st = r[iST].strip() if (iST >= 0 and len(r) > iST) else ""
+        _lab = _always_label(r[iS], r[iE], _st)
+        if _lab is not None:
+            d1, d2 = "상시", _lab.replace("|", " ")
+        else:
+            d1, d2 = _norm_date(r[iS]), _norm_date(r[iE])
         out.append("|".join([r[iR].strip(), r[iN].strip().replace("|","/"),
-            _norm_date(r[iS]), _norm_date(r[iE]), r[iP].strip().replace("|"," "), img, link, ben]))
+            d1, d2, r[iP].strip().replace("|"," "), img, link, ben]))
     if len(out) >= 10:
         open(CACHE, "w", encoding="utf-8").write("\n".join(out) + "\n")
     return len(out)

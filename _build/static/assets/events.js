@@ -67,7 +67,16 @@
     t=t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'');
     return t.slice(0,60);
   }
-  function isAlways(v){ return /^(상시|상시진행|상시모집)$/.test(String(v||'').trim()); }
+  var ALWAYS_RE=/^(상시|상시진행|상시모집|연중|수시)/;
+  // 상시 판별 — 시트 날짜칸이 서식 때문에 텍스트를 못 받는 경우가 있어
+  // '상태' 칸으로도 지정할 수 있게 열어 둔다.
+  function alwaysLabel(start,end,status){
+    var st=String(start||'').trim(), en=String(end||'').trim(), sc=String(status||'').trim();
+    if(/^(상시|상시진행|상시모집|연중|수시)$/.test(st)) return en||'상시 진행';
+    var m=sc.match(ALWAYS_RE);
+    if(m){ var tail=sc.slice(m[1].length).replace(/^[\s·\-—|/]+/,''); return tail||en||'상시 진행'; }
+    return null;
+  }
   function detailUrl(e){
     return '/행사/'+encodeURIComponent(slugify(e.name)+'-'+(e.always?'상시':e.sk))+'/';
   }
@@ -81,14 +90,16 @@
     var hd=rows[0].map(tr);
     function ix(n,d){var i=hd.indexOf(n);return i>=0?i:d;}
     var iR=ix('지역',0),iN=ix('행사명',1),iS=ix('시작일',2),iE=ix('종료일',3),
-        iP=ix('장소',4),iIMG=ix('이미지',6),iL=ix('신청링크',7),iB=hd.indexOf('혜택');
+        iP=ix('장소',4),iIMG=ix('이미지',6),iL=ix('신청링크',7),iB=hd.indexOf('혜택'),
+        iST=ix('상태',5);
     var t0=new Date(); t0.setHours(0,0,0,0);
     return rows.slice(1).map(function(r){
-      var always = isAlways(r[iS]);
+      var lab = alwaysLabel(r[iS], r[iE], iST>=0? r[iST] : '');
+      var always = lab !== null;
       return {city:tr(r[iR]), name:tr(r[iN]),
               sk: always? '' : key(r[iS]), ek: always? '' : key(r[iE]),
               always: always,
-              dateText: always? (tr(r[iE])||'상시 진행') : '',
+              dateText: always? lab : '',
               place:tr(r[iP]), img:absUrl(BANNER,tr(r[iIMG])),
               link:absUrl(PT,tr(r[iL]))||'/초대권-신청/',
               ben: iB>=0? tr(r[iB]) : ''};
