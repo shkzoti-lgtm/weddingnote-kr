@@ -75,6 +75,10 @@ h2.sec{font-size:21px;font-weight:800;letter-spacing:-.4px;margin-bottom:6px;
 .card .cta{margin-top:14px;display:block;text-align:center;background:var(--navy);color:#fff;
   font-weight:700;font-size:14px;padding:11px;border-radius:7px}
 .card .cta:hover{background:var(--gold);color:var(--navy)}
+.card .detail{display:block;text-align:center;margin-top:9px;padding:9px;font-size:13px;font-weight:600;
+  color:#5f6672;border:1px solid #e6e8ec;border-radius:7px;transition:.16s}
+.card .detail:hover{color:#12233d;border-color:#12233d;background:#f6f7f9}
+.card .poster{cursor:pointer}
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
 table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:560px}
 caption{text-align:left;padding:14px 16px;font-weight:700;color:var(--navy);background:var(--soft)}

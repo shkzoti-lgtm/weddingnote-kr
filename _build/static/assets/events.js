@@ -45,6 +45,12 @@
         else if(c=='\n'){row.push(cur);rows.push(row);row=[];cur='';}
         else if(c=='\r'){} else cur+=c; }}
     if(cur!==''||row.length){row.push(cur);rows.push(row);} return rows;}
+  var BANNER='https://replyalba.com/banner/', PT='https://replyalba.com/pt/';
+  // 이미 절대 URL이면 그대로, 코드/파일명일 때만 접두어를 붙인다 (cpaad 등 외부 매체 대응)
+  function absUrl(prefix,v){ v=(v||'').trim(); if(!v) return '';
+    if(/^https?:\/\//i.test(v)) return v;
+    if(v.indexOf('//')===0) return 'https:'+v;
+    return prefix+v; }
   function esc(s){return (s||'').replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];});}
   function tr(s){return (s||'').trim();}
   function pad(n){return ('0'+n).slice(-2);}
@@ -76,7 +82,8 @@
     var t0=new Date(); t0.setHours(0,0,0,0);
     return rows.slice(1).map(function(r){
       return {city:tr(r[iR]), name:tr(r[iN]), sk:key(r[iS]), ek:key(r[iE]),
-              place:tr(r[iP]), img:tr(r[iIMG]), link:tr(r[iL])||'/초대권-신청/',
+              place:tr(r[iP]), img:absUrl(BANNER,tr(r[iIMG])),
+              link:absUrl(PT,tr(r[iL]))||'/초대권-신청/',
               ben: iB>=0? tr(r[iB]) : ''};
     }).filter(function(e){
       if(!e.city||!e.name||!cset[e.city]) return false;
@@ -109,7 +116,7 @@
            : (diff<=0?'<span class="dday now">진행중</span>':'');}
       var ct=multi? '<span class="ctag">'+esc(e.city)+'</span>':'';
       var du=detailUrl(e);
-      var media=e.img? '<a class="poster" href="'+du+'"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
+      var media=e.img? '<a class="poster" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored" aria-label="'+esc(e.name)+' 무료 초대권 신청"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';
       var ben=e.ben? '<div class="benefit">혜택 '+esc(e.ben)+'</div>':'';
       return '<article class="card">'+media+'<div class="body"><div class="tags">'+
         '<span class="status">모집중</span>'+ct+dd+'</div>'+
