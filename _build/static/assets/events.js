@@ -63,7 +63,7 @@
   function fmtS(k){var d=toD(k); return d? pad(d.getMonth()+1)+'.'+pad(d.getDate())+'('+DOW[d.getDay()]+')':'';}
   function nm(n){return String(n).replace(/\s+/g,'').replace(/[·\/,()\-…\.]/g,'');}
   function slugify(n){
-    var t=String(n).normalize('NFC').trim();
+    var t=String(n).normalize('NFC').trim().toLowerCase();   // 대문자 경로는 301 되므로 소문자 고정
     t=t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'');
     return t.slice(0,60);
   }
@@ -176,7 +176,7 @@
 /* ── 정적 카드에 '자세히 보기' 버튼 보강 (JS 렌더 전에도 표시) ── */
 (function(){
   function slugify2(n){
-    var t=String(n).normalize('NFC').trim();
+    var t=String(n).normalize('NFC').trim().toLowerCase();   // 대문자 경로는 301 되므로 소문자 고정
     return t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
   }
   document.addEventListener('DOMContentLoaded', function(){
