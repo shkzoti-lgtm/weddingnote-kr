@@ -558,7 +558,7 @@ def week_page(evs):
     URLS.append(url)
 
 MON_KO = {1:"1월",2:"2월",3:"3월",4:"4월",5:"5월",6:"6월",7:"7월",8:"8월",9:"9월",10:"10월",11:"11월",12:"12월"}
-def month_page(ym, evs, all_months):
+def month_page(ym, evs, all_months, always_evs=None):
     y, m = int(ym[:4]), int(ym[5:7])
     path="/일정/%s/" % ym; url=DOMAIN+path
     label = "%d년 %s" % (y, MON_KO[m])
@@ -604,6 +604,22 @@ def month_page(ym, evs, all_months):
 
     tips = ED.sample(ED.MON_TIP, ym, 4, "mt")
     tips_html = "".join(f"<div class='tip'><h3>{esc(t)}</h3><p>{esc(d)}</p></div>" for t, d in tips)
+
+    # 상시 진행 상담·초대전 — 날짜가 고정된 행사와 섞지 않고 따로 붙인다.
+    # (주차 분포·건수 같은 수치는 기간 한정 행사 기준을 그대로 유지한다)
+    always_evs = always_evs or []
+    always_html = ""
+    if always_evs:
+        _ac = []
+        for x in always_evs:
+            if x["city"] not in _ac: _ac.append(x["city"])
+        _lead = ("%s에도 날짜와 상관없이 예약해 방문할 수 있는 상담·초대전이 %d건 있습니다. "
+                 "%s 등 %d개 도시에서 진행되며, 특정 주말 일정이 맞지 않을 때 대안으로 보시면 됩니다."
+                 % (label, len(always_evs), "·".join(_ac[:6]), len(_ac)))
+        always_html = (
+            "<section class=\"wrap\"><h2 class=\"sec\">%s에도 상시 진행 중인 상담·초대전 (%d건)</h2>"
+            "<p class=\"sub\">%s</p><div class=\"cards\">%s</div></section>"
+            % (esc(label), len(always_evs), esc(_lead), cards_html(always_evs, show_city=True)))
     body=f"""{header()}{breadcrumb_html(bc)}<main>
      <section class="hero"><div class="wrap"><p class="eyebrow">월별 일정</p>
       <h1>{label} 웨딩박람회 일정</h1>
@@ -611,12 +627,14 @@ def month_page(ym, evs, all_months):
       <div class="monthnav">{nav}</div></div></section>
      <section class="wrap"><h2 class="sec">{label} 일정 개요</h2><div class="factbox">{fact_html}</div></section>
      <section class="wrap"><div class="cards">{cards_html(evs, show_city=True)}</div></section>
+     {always_html}
      <section class="wrap"><h2 class="sec">{label} 주차별 분포</h2>{week_html}</section>
      <section class="wrap"><h2 class="sec">{label} 지역별 분포</h2>{city_html}</section>
      <section class="wrap"><h2 class="sec">{label} 방문 계획 세우기</h2><div class="tips">{tips_html}</div></section>
     </main>{footer()}"""
     w(path+"index.html", head(title, desc, kw, url,
-      [ld_breadcrumb(bc), ld_itemlist(label+" 웨딩박람회", [e["name"] for e in evs])]) + body)
+      [ld_breadcrumb(bc), ld_itemlist(label+" 웨딩박람회",
+        [e["name"] for e in evs] + [e["name"] for e in always_evs])]) + body)
     URLS.append(url)
 
 def month_index(mmap):
@@ -969,7 +987,7 @@ if __name__ == "__main__":
     except Exception as _e2:
         print("  진단 파일 기록 실패:", _e2)
 
-    EVS.sort(key=lambda x: (bool(x.get("always")), x["start"], x["city"]))
+    EVS.sort(key=EV.sortkey)
     TOTAL_EV = len(EVS)
     print("  진행/예정 행사: %d건" % len(EVS))
 
@@ -981,7 +999,7 @@ if __name__ == "__main__":
             out = []
             for c in cs: out += by_city.get(c, [])
             out += by_city.get(loc, [])
-            return sorted(out, key=lambda x: x["start"])
+            return sorted(out, key=EV.sortkey)
         return by_city.get(loc, [])
 
     home(EVS)
@@ -1006,7 +1024,10 @@ if __name__ == "__main__":
         if e.get("month"): mmap.setdefault(e["month"], []).append(e)
     months = sorted(mmap.keys())
     month_index(mmap)
-    for ym in months: month_page(ym, mmap[ym], months)
+    ALWAYS_EVS = [e for e in EVS if e.get("always")]
+    _cur = TODAY_D.strftime("%Y-%m")
+    for ym in months:
+        month_page(ym, mmap[ym], months, ALWAYS_EVS if ym >= _cur else [])
 
     guide_index()
     for s,t,k in ARTICLES: article_page(s,t,k)

@@ -134,6 +134,11 @@ def slugify(name):
     s = re.sub(r'[^\w가-힣]+', '-', s).strip('-')
     return s[:60]
 
+def sortkey(x):
+    """목록 정렬 기준 — 상시 진행을 맨 위로, 그다음 시작일이 빠른 순.
+       (not always) 이라 상시는 0, 나머지는 1 이 되어 앞에 선다."""
+    return (not x.get("always"), x["start"], x["city"])
+
 def load(refresh=True):
     if refresh:
         try:
@@ -193,7 +198,7 @@ def load(refresh=True):
             "always": False,
             "date_text": "",
         })
-    evs.sort(key=lambda x: (bool(x.get("always")), x["start"], x["city"]))
+    evs.sort(key=sortkey)
     return evs
 
 DOW = "월화수목금토일"
