@@ -84,6 +84,7 @@ def faqs_for(loc):
     v = VENUE.get(loc, "주요 행사장")
     return [(q.format(loc=loc, v=v), a.format(loc=loc, v=v))
             for q, a in ED.sample(ED.LOC_FAQ, loc, 8, "locfaq")]
+    faq = [(ED.fix_josa(q), ED.fix_josa(a)) for q, a in faq]
 
 def loc_page(loc, region, path, my_evs=None):
     url = DOMAIN + path
@@ -215,10 +216,14 @@ def loc_page(loc, region, path, my_evs=None):
 
 # ── 행사 카드 정적 렌더 (검색봇이 읽는 HTML) ──────────────────────
 def event_card(e, show_city=False):
-    d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
-    dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, EV.fmt_short(e["end"]))
-    dday = ("<span class='dday'>D-%d</span>" % e["dday"]) if 0 < e["dday"] <= 30 else \
-           ("<span class='dday now'>진행중</span>" if e["dday"] <= 0 else "")
+    if e.get("always"):
+        dates = e.get("date_text") or "상시 진행"
+        dday = "<span class='dday now'>상시</span>"
+    else:
+        d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
+        dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, EV.fmt_short(e["end"]))
+        dday = ("<span class='dday'>D-%d</span>" % e["dday"]) if 0 < e["dday"] <= 30 else \
+               ("<span class='dday now'>진행중</span>" if e["dday"] <= 0 else "")
     # 썸네일 클릭 → 무료 초대권 신청(외부). 상세 페이지는 아래 '자세히 보기' 버튼으로만 이동.
     img = ('<a class="poster" href="%s" target="_blank" rel="noopener nofollow sponsored" '
            'aria-label="%s 무료 초대권 신청"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
@@ -238,9 +243,26 @@ def cards_html(evs, show_city=False, empty="현재 모집 중인 일정이 없�
     if not evs: return '<div class="loading">%s</div>' % empty
     return "".join(event_card(e, show_city) for e in evs)
 
+_DAYMAP = [("월", "Monday"), ("화", "Tuesday"), ("수", "Wednesday"), ("목", "Thursday"),
+           ("금", "Friday"), ("토", "Saturday"), ("일", "Sunday")]
+
+def _bydays(txt):
+    """'매주 토요일/일요일' 같은 표기에서 요일을 뽑는다. 못 찾으면 주말로 둔다."""
+    t = txt or ""
+    days = ["https://schema.org/%s" % en for ko, en in _DAYMAP if (ko + "요일") in t]
+    if not days and "주말" in t:
+        days = ["https://schema.org/Saturday", "https://schema.org/Sunday"]
+    return days or ["https://schema.org/Saturday", "https://schema.org/Sunday"]
+
 def ld_event(e):
     return json.dumps({"@context":"https://schema.org","@type":"Event",
-      "name":e["name"], "startDate":e["start"].isoformat(), "endDate":e["end"].isoformat(),
+      "name":e["name"],
+      **({"eventSchedule": {"@type": "Schedule",
+                            "repeatFrequency": "P1W",
+                            "byDay": _bydays(e.get("date_text", "")),
+                            "startDate": e["start"].isoformat()}}
+         if e.get("always") else
+         {"startDate": e["start"].isoformat(), "endDate": e["end"].isoformat()}),
       "eventStatus":"https://schema.org/EventScheduled",
       "eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode",
       "location":{"@type":"Place","name":e["place"],
@@ -259,18 +281,33 @@ def event_page(e, same_city):
     slug = e["slug"]
     path = "/행사/%s/" % slug; url = DOMAIN + path
     region = region_of_city(e["city"])
-    d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
-    dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
+    if e.get("always"):
+        d1 = d2 = ""
+        dates = e.get("date_text") or "상시 진행"
+    else:
+        d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
+        dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
 
     ad = ED.parse_addr(e["place"])
-    df = ED.date_facts(e["start"], e["end"])
-    fact_sents = ED.addr_sentences(ad, e["city"], slug) + ED.date_sentences(df, slug)
+    if e.get("always"):
+        # 상시 행사는 날짜 파생 문장(요일·일수·성수기)이 성립하지 않는다
+        df = None
+        _lbl = e.get("date_text") or "상시 진행"
+        fact_sents = ED.addr_sentences(ad, e["city"], slug) + [
+            "이 행사는 특정 날짜가 아니라 %s 일정으로 진행됩니다." % _lbl,
+            "방문 전 신청 페이지에서 해당 주 운영 여부를 확인해 주세요.",
+        ]
+    else:
+        df = ED.date_facts(e["start"], e["end"])
+        fact_sents = ED.addr_sentences(ad, e["city"], slug) + ED.date_sentences(df, slug)
     scale = ED.scale_sentence(e["name"])
     if scale: fact_sents.append(scale)
 
-    title = "%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회" % (e["name"], EV.fmt_short(e["start"]), e["city"])
-    desc = "%s은 %s %s에서 열립니다. %s" % (
-        e["name"], dates, ad["gu"] or e["city"],
+    title = ("%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회"
+             % (e["name"], "상시 진행" if e.get("always")
+                else EV.fmt_short(e["start"]), e["city"]))
+    desc = "%s%s %s %s에서 열립니다. %s" % (e["name"], ED.josa(e["name"]),
+        dates, ad["gu"] or e["city"],
         ED.pick(["무료 초대권 신청과 웨딩홀·스드메 상담 정보를 확인하세요.",
                  "초대권 사전 신청 방법과 방문 전 확인 사항을 정리했습니다.",
                  "무료 입장 신청과 상담 준비 항목을 안내합니다."], slug, "desc"))
@@ -289,6 +326,7 @@ def event_page(e, same_city):
     faq = [(q.format(n=e["name"], p=e["place"], c=e["city"]),
             a.format(n=e["name"], p=e["place"], c=e["city"]))
            for q, a in ED.sample(ED.FAQ_POOL, slug, 7, "faq")]
+    faq = [(ED.fix_josa(q), ED.fix_josa(a)) for q, a in faq]
     faq_html = "".join("<details><summary>%s</summary><div class='a'>%s</div></details>"
                        % (esc(q), esc(a)) for q, a in faq)
 
@@ -340,7 +378,7 @@ def event_page(e, same_city):
  <section class="wrap">
   <div class="aeo">
    <h2>{esc(e['name'])}, {esc(h2_apply)}</h2>
-   <p class="ans">{esc(e['name'])}은 <b>{dates}</b> {esc(e['place'])}에서 열립니다. {esc(lead)}</p>
+   <p class="ans">{esc(e['name'])}{ED.josa(e['name'])} <b>{dates}</b> {esc(e['place'])}에서 열립니다. {esc(lead)}</p>
    <p class="ans-sub"><b>신청 방법</b></p>
    <ol>{steps_html}</ol>
    <p class="pnote">※ {esc(closing)}</p>
@@ -393,13 +431,15 @@ def venue_page(venue, evs):
         facts.append("확인된 회차는 %s 지역에 걸쳐 있습니다." % "·".join(cities[:4]))
     elif cities:
         facts.append("%s 지역 예비부부께서 방문하기 좋은 위치입니다." % c1)
-    wk = sorted({"%s요일" % "월화수목금토일"[e["start"].weekday()] for e in evs})
+    wk = sorted({"%s요일" % "월화수목금토일"[e["start"].weekday()]
+                 for e in evs if not e.get("always")})
     if wk: facts.append("시작 요일은 %s 기준으로 잡혀 있습니다." % "·".join(wk))
     fact_html = "".join("<p>%s</p>" % f for f in facts)
 
     tips = ED.sample(ED.VEN_TIP, venue, 6, "vt")
     caus = ED.sample(ED.VEN_CAU, venue, 6, "vcau")
-    faqs = [(q.format(v=venue), a.format(v=venue)) for q, a in ED.sample(ED.VEN_FAQ, venue, 6, "vf")]
+    faqs = [(ED.fix_josa(q.format(v=venue)), ED.fix_josa(a.format(v=venue)))
+            for q, a in ED.sample(ED.VEN_FAQ, venue, 6, "vf")]
     lds.append(ld_faq(faqs))
     h2i = ED.pick(ED.VEN_H2_INFO, venue).format(v=venue)
     h2t = ED.pick(ED.VEN_H2_TIP,  venue).format(v=venue)
@@ -738,7 +778,7 @@ def article_page(slug, title_ko, kw):
     inner = "".join(f"<h2 class='sec'>{h}</h2><p class='para'>{p}</p>" for h,p in secs)
     def _fmt(s):
         return s.replace("{loc}", "우리 지역").replace("{v}", "행사장")
-    afaq = [(_fmt(q), _fmt(a)) for q, a in ED.sample(ED.LOC_FAQ, slug, 6, "art")]
+    afaq = [(ED.fix_josa(_fmt(q)), ED.fix_josa(_fmt(a))) for q, a in ED.sample(ED.LOC_FAQ, slug, 6, "art")]
     lds.append(ld_faq(afaq))
     afaq_html = "".join("<details><summary>%s</summary><div class='a'>%s</div></details>"
                         % (esc(q), esc(a)) for q, a in afaq)
@@ -873,8 +913,20 @@ if __name__ == "__main__":
     EVS = EV.load(refresh=True)
     print("  replyalba(시트): %d건" % len(EVS))
 
-    # cpaad 보완 — 시트에 없는 행사만 추가 (넷리파이 빌드 서버에서 수집)
+    # cpaad 보완 — 넷리파이(해외 IP)에서는 cpaad 접속이 타임아웃이라 기본 비활성.
+    # 매 빌드마다 25초 x 3회를 헛되이 쓰게 되므로 끕니다.
+    # 수집은 사장님 PC의 cpaad자동.py 가 시트에 직접 넣습니다.
+    # 되살리려면 넷리파이 환경변수 CPAAD_ENABLE=1 을 넣으세요.
+    if os.environ.get("CPAAD_ENABLE") != "1":
+        print("  cpaad 빌드측 수집: 비활성 (PC 수집기가 시트에 직접 기록)")
+        CP.DIAG.append("빌드측 cpaad 수집 비활성 — CPAAD_ENABLE=1 로 켤 수 있습니다")
+        _skip_cpaad = True
+    else:
+        _skip_cpaad = False
+
     try:
+        if _skip_cpaad:
+            raise StopIteration
         _today = datetime.date.today()
         _added = 0
         for r in CP.merge_new(EVS):
@@ -892,6 +944,8 @@ if __name__ == "__main__":
             _added += 1
         print("  cpaad 병합: %d건 추가" % _added)
         CP.DIAG.append("cpaad 병합 결과: %d건 추가" % _added)
+    except StopIteration:
+        pass
     except Exception as _e:
         print("  cpaad 병합 생략:", type(_e).__name__, _e)
         try: CP.DIAG.append("cpaad 병합 예외: %s: %s" % (type(_e).__name__, _e))
@@ -939,7 +993,8 @@ if __name__ == "__main__":
     # 이번주 / 월별
     week_page(EVS)
     mmap = {}
-    for e in EVS: mmap.setdefault(e["month"], []).append(e)
+    for e in EVS:
+        if e.get("month"): mmap.setdefault(e["month"], []).append(e)
     months = sorted(mmap.keys())
     month_index(mmap)
     for ym in months: month_page(ym, mmap[ym], months)

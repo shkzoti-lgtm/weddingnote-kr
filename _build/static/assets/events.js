@@ -67,7 +67,10 @@
     t=t.replace(/[^\w가-힣]+/g,'-').replace(/^-+|-+$/g,'');
     return t.slice(0,60);
   }
-  function detailUrl(e){ return '/행사/'+encodeURIComponent(slugify(e.name)+'-'+e.sk)+'/'; }
+  function isAlways(v){ return /^(상시|상시진행|상시모집)$/.test(String(v||'').trim()); }
+  function detailUrl(e){
+    return '/행사/'+encodeURIComponent(slugify(e.name)+'-'+(e.always?'상시':e.sk))+'/';
+  }
   function cat(n){n=String(n).replace(/\s+/g,'');
     if(/허니문|신혼여행/.test(n))return'h'; if(/혼수|가전/.test(n))return'o';
     if(/드레스/.test(n))return'd'; if(/예물|주얼리|한복|예복/.test(n))return'j';
@@ -81,12 +84,18 @@
         iP=ix('장소',4),iIMG=ix('이미지',6),iL=ix('신청링크',7),iB=hd.indexOf('혜택');
     var t0=new Date(); t0.setHours(0,0,0,0);
     return rows.slice(1).map(function(r){
-      return {city:tr(r[iR]), name:tr(r[iN]), sk:key(r[iS]), ek:key(r[iE]),
+      var always = isAlways(r[iS]);
+      return {city:tr(r[iR]), name:tr(r[iN]),
+              sk: always? '' : key(r[iS]), ek: always? '' : key(r[iE]),
+              always: always,
+              dateText: always? (tr(r[iE])||'상시 진행') : '',
               place:tr(r[iP]), img:absUrl(BANNER,tr(r[iIMG])),
               link:absUrl(PT,tr(r[iL]))||'/초대권-신청/',
               ben: iB>=0? tr(r[iB]) : ''};
     }).filter(function(e){
       if(!e.city||!e.name||!cset[e.city]) return false;
+      if(e.always) return true;
+      if(!e.sk) return false;
       var d=toD(e.ek||e.sk); return !d || d>=t0;
     });
   }
@@ -97,23 +106,34 @@
 
   Promise.all([fetchTab(null), fetchTab('수동추가')]).then(function(res){
     var all=res[0], seenN={}, seenP={};
-    all.forEach(function(e){ seenN[nm(e.name)+'|'+e.sk]=1;
-      seenP[e.city+'|'+e.sk+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name)]=1; });
+    all.forEach(function(e){ var _s=e.always?'상시':e.sk;
+      seenN[nm(e.name)+'|'+_s]=1;
+      seenP[e.city+'|'+_s+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name)]=1; });
     res[1].forEach(function(e){
-      var k1=nm(e.name)+'|'+e.sk, k2=e.city+'|'+e.sk+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name);
+      var _sk=e.always?'상시':e.sk;
+      var k1=nm(e.name)+'|'+_sk, k2=e.city+'|'+_sk+'|'+e.place.replace(/\s+/g,'').slice(0,10)+'|'+cat(e.name);
       if(seenN[k1]||seenP[k2]) return;
       seenN[k1]=1; seenP[k2]=1; all.push(e);
     });
     // 정적 카드보다 적으면 덮어쓰지 않음
     if(all.length < staticCount) return;
-    all.sort(function(a,b){return a.sk.localeCompare(b.sk);});
+    all.sort(function(a,b){
+      if(a.always!==b.always) return a.always?1:-1;
+      return String(a.sk).localeCompare(String(b.sk));
+    });
     var t0=new Date(); t0.setHours(0,0,0,0);
     box.innerHTML=all.map(function(e){
-      var dates=fmt(e.sk)+(e.ek&&e.ek!==e.sk? ' ~ '+fmtS(e.ek):'');
-      var dd='', d=toD(e.sk);
-      if(d){var diff=Math.ceil((d-t0)/86400000);
-        dd = diff>0&&diff<=30 ? '<span class="dday">D-'+diff+'</span>'
-           : (diff<=0?'<span class="dday now">진행중</span>':'');}
+      var dates, dd='';
+      if(e.always){
+        dates = e.dateText || '상시 진행';
+        dd = '<span class="dday now">상시</span>';
+      } else {
+        dates = fmt(e.sk)+(e.ek&&e.ek!==e.sk? ' ~ '+fmtS(e.ek):'');
+        var d=toD(e.sk);
+        if(d){var diff=Math.ceil((d-t0)/86400000);
+          dd = diff>0&&diff<=30 ? '<span class="dday">D-'+diff+'</span>'
+             : (diff<=0?'<span class="dday now">진행중</span>':'');}
+      }
       var ct=multi? '<span class="ctag">'+esc(e.city)+'</span>':'';
       var du=detailUrl(e);
       var media=e.img? '<a class="poster" href="'+esc(e.link)+'" target="_blank" rel="noopener nofollow sponsored" aria-label="'+esc(e.name)+' 무료 초대권 신청"><img src="'+esc(e.img)+'" alt="'+esc(e.name)+' 포스터" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>':'';

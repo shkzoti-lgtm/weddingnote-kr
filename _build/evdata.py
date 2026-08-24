@@ -12,6 +12,37 @@ import re, random, hashlib, datetime
 # ─────────────────────────────────────────────────────────
 # 0. 해시 배정 — 재빌드해도 같은 행사는 같은 문장이 나온다
 # ─────────────────────────────────────────────────────────
+def josa(word, kind="은는"):
+    """받침 유무에 따라 조사를 고른다. '웨딩박람회은' 같은 오류를 막는다."""
+    w = (word or "").rstrip()
+    pairs = {"은는": ("은", "는"), "이가": ("이", "가"), "을를": ("을", "를"),
+             "과와": ("과", "와"), "으로로": ("으로", "로"), "이라라": ("이라", "라")}
+    a, b = pairs.get(kind, ("은", "는"))
+    if not w: return b
+    ch = w[-1]
+    if not ("가" <= ch <= "힣"):
+        # 숫자·영문은 발음 기준으로 대략 판정
+        return a if ch in "0136780lmnLMN" else b
+    jong = (ord(ch) - 0xAC00) % 28
+    if kind == "으로로" and jong == 8:   # ㄹ 받침은 '로'
+        return b
+    return a if jong else b
+
+_JOSA_PAIRS = [("은", "는"), ("이", "가"), ("을", "를"), ("과", "와")]
+_JOSA_RE = re.compile(r"([가-힣])(은|는|이|가|을|를|과|와)(?=[\s,.!?)\]]|$)")
+
+def fix_josa(text):
+    """'웨딩박람회은' 처럼 받침과 안 맞는 조사를 바로잡는다.
+       템플릿에 조사가 박혀 있어 이름에 따라 틀리는 경우를 뒤에서 교정한다."""
+    def _rep(m):
+        ch, j = m.group(1), m.group(2)
+        jong = (ord(ch) - 0xAC00) % 28
+        for a, b in _JOSA_PAIRS:
+            if j in (a, b):
+                return ch + (a if jong else b)
+        return m.group(0)
+    return _JOSA_RE.sub(_rep, text or "")
+
 def h(key, salt=""):
     return int(hashlib.md5((key + "|" + salt).encode("utf-8")).hexdigest()[:8], 16)
 

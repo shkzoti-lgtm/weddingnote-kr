@@ -90,6 +90,29 @@ def load(refresh=True):
         city, name, s, e, place, img, code = p[:7]
         benefit = p[7] if len(p) > 7 else ""
         if not (city and name and s): continue
+
+        # 상시 진행 행사 — 시작일 칸에 '상시', 종료일 칸에 표기할 문구
+        # (예: 시작일=상시 / 종료일=매주 토요일·일요일)
+        if s.strip() in ("상시", "상시진행", "상시모집"):
+            label = (e or "").strip() or "상시 진행"
+            key = (city, name, "상시")
+            if key in seen: continue
+            seen.add(key)
+            evs.append({
+                "city": city, "name": name,
+                "start": today, "end": today + datetime.timedelta(days=365),
+                "place": place,
+                "img": _abs_url(BANNER, img),
+                "link": _abs_url(PT, code) or "/초대권-신청/",
+                "slug": slugify(name) + "-상시",     # 날짜가 안 붙어 URL 이 고정된다
+                "benefit": benefit,
+                "dday": 0,
+                "month": "",                          # 월별 페이지에는 넣지 않는다
+                "always": True,
+                "date_text": label,                   # 화면에 이 문구를 그대로 쓴다
+            })
+            continue
+
         try:
             sd = datetime.date.fromisoformat(s)
             ed = datetime.date.fromisoformat(e) if e else sd
@@ -108,8 +131,10 @@ def load(refresh=True):
             "benefit": benefit,
             "dday": (sd - today).days,
             "month": s[:7],
+            "always": False,
+            "date_text": "",
         })
-    evs.sort(key=lambda x: (x["start"], x["city"]))
+    evs.sort(key=lambda x: (bool(x.get("always")), x["start"], x["city"]))
     return evs
 
 DOW = "월화수목금토일"
