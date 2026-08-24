@@ -157,6 +157,19 @@
         '<a class="detail" href="'+du+'">박람회 정보 자세히 보기</a>'+
         '</div></article>';
     }).join('');
+
+    /* 정적 빌드 이후 시트가 바뀌면 카드 수와 상단 숫자가 어긋난다.
+       화면에 실제로 그려진 카드 수로 상단 통계와 소제목을 맞춰 준다. */
+    try{
+      var stat=document.querySelector('.hero .stats b');
+      if(stat) stat.textContent=String(all.length);
+      var sec=box.closest? box.closest('section') : null;
+      var h2=sec? sec.querySelector('h2.sec') : null;
+      if(h2){
+        var base=h2.textContent.replace(/\s*\(\s*\d+\s*건\s*\)\s*$/,'').trim();
+        h2.textContent = all.length? (base+' ('+all.length+'건)') : base;
+      }
+    }catch(_e){}
   }).catch(function(){});
 })();
 
