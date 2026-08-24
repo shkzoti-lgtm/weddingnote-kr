@@ -891,8 +891,21 @@ if __name__ == "__main__":
                         "dday": (sd - _today).days, "month": r["start"][:7]})
             _added += 1
         print("  cpaad 병합: %d건 추가" % _added)
+        CP.DIAG.append("cpaad 병합 결과: %d건 추가" % _added)
     except Exception as _e:
         print("  cpaad 병합 생략:", type(_e).__name__, _e)
+        try: CP.DIAG.append("cpaad 병합 예외: %s: %s" % (type(_e).__name__, _e))
+        except Exception: pass
+
+    # 진단 결과를 사이트에 파일로 남긴다 (robots 로 수집 차단)
+    try:
+        _diag = "\n".join(getattr(CP, "DIAG", []) or ["(진단 기록 없음)"])
+        w("_cpaad-status.txt",
+          "weddingnote cpaad 수집 진단\n빌드 시각(UTC): %s\n대상 URL: %s\n%s\n%s\n"
+          % (datetime.datetime.utcnow().isoformat(timespec="seconds"),
+             CP.CPAAD_URL, "-" * 50, _diag))
+    except Exception as _e2:
+        print("  진단 파일 기록 실패:", _e2)
 
     EVS.sort(key=lambda x: (x["start"], x["city"]))
     print("  진행/예정 행사: %d건" % len(EVS))
@@ -944,7 +957,7 @@ if __name__ == "__main__":
                   % (enc_url(u), TODAY, pr))
     sm.append('</urlset>')
     w("sitemap.xml", "\n".join(sm))
-    w("robots.txt", "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % DOMAIN)
+    w("robots.txt", "User-agent: *\nAllow: /\nDisallow: /_cpaad-status.txt\n\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
     pd = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")

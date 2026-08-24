@@ -19,6 +19,11 @@ GROUP = {
 
 CPAAD_ORIGIN = "https://ad.cpaad.co.kr"
 
+DIAG = []          # 빌드 진단 로그 — site/_cpaad-status.txt 로 출력된다
+def _log(msg):
+    DIAG.append(msg)
+    print("  " + msg)
+
 def _absolutize(u):
     """cpaad 페이지의 상대경로를 절대 URL로 만든다."""
     u = (u or "").strip().strip('"\'')
@@ -100,17 +105,27 @@ def _dates(txt):
 
 def fetch_html():
     for url in (CPAAD_URL,
-                CPAAD_URL.replace("https://","http://"),
+                CPAAD_URL.replace("https://", "http://"),
                 "https://r.jina.ai/" + CPAAD_URL):
+        tag = url.split('//')[1][:34]
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA,
-                    "Accept":"text/html,*/*", "Accept-Language":"ko-KR,ko;q=0.9"})
-            html = urllib.request.urlopen(req, timeout=25).read().decode("utf-8","ignore")
-            if "ad_title" in html:
-                print("  cpaad 접속 성공: %s (%d bytes)" % (url.split('//')[1][:28], len(html)))
+                    "Accept": "text/html,*/*", "Accept-Language": "ko-KR,ko;q=0.9"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                code = r.getcode()
+                html = r.read().decode("utf-8", "ignore")
+            has_title = "ad_title" in html
+            has_id = CPAAD_ID in html
+            _log("cpaad 응답 %s → HTTP %s, %d bytes, ad_title=%s, %s=%s"
+                 % (tag, code, len(html), has_title, CPAAD_ID, has_id))
+            if has_title:
                 return html
+            # 내용이 기대와 다르면 앞부분을 남겨 원인 판단에 쓴다
+            head = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html[:1500]))[:400]
+            _log("  받은 내용 앞부분: " + head)
         except Exception as e:
-            print("  cpaad 실패(%s): %s" % (url.split('//')[1][:20], type(e).__name__))
+            _log("cpaad 실패 %s → %s: %s" % (tag, type(e).__name__, str(e)[:90]))
+    _log("cpaad 수집 실패 — 세 경로 모두 사용 불가")
     return None
 
 def parse(html):
@@ -158,20 +173,20 @@ def parse(html):
                     "place":loc, "img":img, "link":link, "benefit":info})
     if seen_blocks:
         _lost = sum(drop.values())
-        print("  cpaad 파싱: 블록 %d개 중 %d건 인식, %d건 누락 %s"
-              % (seen_blocks, len(out), _lost,
-                 {k: v for k, v in drop.items() if v} if _lost else ""))
+        _log("cpaad 파싱: 블록 %d개 중 %d건 인식, %d건 누락 %s"
+             % (seen_blocks, len(out), _lost,
+                {k: v for k, v in drop.items() if v} if _lost else ""))
         if _unmatched:
-            print("    도시 미매칭 예시:", " | ".join(_unmatched))
+            _log("  도시 미매칭 예시: " + " | ".join(_unmatched))
     else:
-        print("  cpaad 파싱: 행사 블록을 하나도 못 찾음 — 페이지 구조가 바뀌었을 수 있습니다")
+        _log("cpaad 파싱: 행사 블록을 하나도 못 찾음 — 페이지 구조가 바뀌었을 수 있습니다")
     return out
 
 def merge_new(existing):
     """existing: events.load() 결과. cpaad에만 있는 행사를 dict 리스트로 반환"""
     html = fetch_html()
     if not html:
-        print("  cpaad 수집 건너뜀 (접속 불가)")
+        _log("cpaad 수집 건너뜀 (접속 불가)")
         return []
     rows = parse(html)
     by_name, by_place = set(), set()
@@ -186,5 +201,9 @@ def merge_new(existing):
         if k1 in by_name or k2 in by_place: continue
         by_name.add(k1); by_place.add(k2)
         new.append(r)
-    print("  cpaad: 파싱 %d건 중 신규 %d건" % (len(rows), len(new)))
+    _log("cpaad: 파싱 %d건 중 시트에 없는 신규 %d건" % (len(rows), len(new)))
+    if rows and not new:
+        _log("  (파싱은 됐으나 전부 시트와 중복으로 판정됨)")
+    for _r in new[:8]:
+        _log("  신규: %s %s %s~%s" % (_r["city"], _r["name"][:22], _r["start"], _r["end"]))
     return new
