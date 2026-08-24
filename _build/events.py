@@ -10,6 +10,12 @@ BANNER = "https://replyalba.com/banner/"
 PT = "https://replyalba.com/pt/"
 
 ALWAYS_WORDS = ("상시", "상시진행", "상시모집", "연중", "수시")
+CANON_HD  = ["지역","행사명","시작일","종료일","장소","상태","이미지","신청링크","혜택"]
+WARN = []          # 빌드 중 발견한 시트 이상 (gen.py 가 진단 파일로 뽑는다)
+
+# 시트 날짜 칸이 서식 때문에 텍스트를 거부하면 '상시'가 통째로 지워진다.
+# 그럴 때 종료일·상태 칸에 남은 반복 표현으로도 상시를 알아보게 한다.
+_RECUR_RE = re.compile(r"매주|매월|주말|평일|연중|상시|수시|상설")
 
 def _always_label(start, end, status):
     """상시 행사인지 판별하고 화면에 쓸 문구를 돌려준다.
@@ -27,6 +33,11 @@ def _always_label(start, end, status):
         if sc.startswith(w):
             tail = sc[len(w):].lstrip(" ·-—|/")
             return tail or en or "상시 진행"
+    # 시작일이 비었는데 종료일·상태에 '매주 토요일/일요일' 같은 반복 표현이 남아 있으면 상시로 본다
+    if not st:
+        for v in (en, sc):
+            if v and _RECUR_RE.search(v) and not re.search(r"\d{4}\D+\d{1,2}\D+\d{1,2}", v):
+                return v
     return None
 
 def _strip_prefix(prefix, v):
@@ -64,16 +75,27 @@ def fetch_sheet():
     if len(rows) < 2: raise RuntimeError("빈 시트")
     hd = [c.strip() for c in rows[0]]
 
-    # '수동추가' 탭이 있으면 이어붙임 (헤더 제외)
+    # 1행이 표준 헤더인지 확인한다. 셀에 여러 줄을 한꺼번에 붙여넣으면
+    # 헤더가 통째로 덮여, 예전에는 여기서 조용히 전체가 어긋났다.
+    hd_ok = hd[:2] == CANON_HD[:2]
+    if not hd_ok:
+        WARN.append("시트1 1행(헤더)이 표준이 아닙니다 → 표준 순서로 대체해 읽었습니다. "
+                    "1행 첫 칸: %r" % (hd[0][:60] if hd else ""))
+        print("  [경고] 시트1 헤더 손상 — 표준 순서로 대체")
+        hd = list(CANON_HD)
+
+    # '수동추가' 탭은 자기 헤더만 정상이면 병합한다 (시트1 헤더 상태와 무관)
     try:
         extra = _fetch_tab("수동추가")
         if len(extra) > 1 and any(c.strip() for c in extra[0]):
             ehd = [c.strip() for c in extra[0]]
-            if ehd[:2] == hd[:2]:          # 헤더 구조 동일할 때만
+            if ehd[:2] == CANON_HD[:2]:
                 rows += extra[1:]
                 print("  수동추가 탭: %d건 병합" % (len(extra)-1))
+            else:
+                WARN.append("수동추가 탭 헤더가 표준이 아니라 병합하지 않았습니다: %r" % ehd[:2])
     except Exception as e:
-        pass
+        WARN.append("수동추가 탭을 읽지 못했습니다 (%s)" % type(e).__name__)
     def ix(n, d):
         return hd.index(n) if n in hd else d
     iR,iN,iS,iE,iP,iIMG,iL = ix('지역',0),ix('행사명',1),ix('시작일',2),ix('종료일',3),ix('장소',4),ix('이미지',6),ix('신청링크',7)
@@ -93,6 +115,16 @@ def fetch_sheet():
             d1, d2 = _norm_date(r[iS]), _norm_date(r[iE])
         out.append("|".join([r[iR].strip(), r[iN].strip().replace("|","/"),
             d1, d2, r[iP].strip().replace("|"," "), img, link, ben]))
+    prev = 0
+    try:
+        prev = sum(1 for _ in open(CACHE, encoding="utf-8"))
+    except Exception:
+        pass
+    # 시트 사고(헤더 덮어쓰기·행 삭제)로 건수가 반토막 나면 캐시를 지키고 경고만 남긴다.
+    if prev >= 50 and len(out) < prev * 0.5:
+        WARN.append("시트 건수가 %d → %d 로 급감해 캐시를 유지했습니다. 시트를 확인하세요." % (prev, len(out)))
+        print("  [경고] 시트 급감 %d → %d — 캐시 유지" % (prev, len(out)))
+        return prev
     if len(out) >= 10:
         open(CACHE, "w", encoding="utf-8").write("\n".join(out) + "\n")
     return len(out)
@@ -120,7 +152,7 @@ def load(refresh=True):
 
         # 상시 진행 행사 — 시작일 칸에 '상시', 종료일 칸에 표기할 문구
         # (예: 시작일=상시 / 종료일=매주 토요일·일요일)
-        if s.strip() in ("상시", "상시진행", "상시모집"):
+        if s.strip() in ALWAYS_WORDS:
             label = (e or "").strip() or "상시 진행"
             key = (city, name, "상시")
             if key in seen: continue

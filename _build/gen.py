@@ -958,7 +958,10 @@ if __name__ == "__main__":
 
     # 진단 결과를 사이트에 파일로 남긴다 (robots 로 수집 차단)
     try:
-        _diag = "\n".join(getattr(CP, "DIAG", []) or ["(진단 기록 없음)"])
+        _sheetwarn = getattr(EV, "WARN", []) or []
+        _diag = "\n".join((["[시트 경고] " + x for x in _sheetwarn] or [])
+                          + (getattr(CP, "DIAG", []) or ["(진단 기록 없음)"]))
+        for _x in _sheetwarn: print("  [시트 경고]", _x)
         w("_cpaad-status.txt",
           "weddingnote cpaad 수집 진단\n빌드 시각(UTC): %s\n대상 URL: %s\n%s\n%s\n"
           % (datetime.datetime.utcnow().isoformat(timespec="seconds"),
@@ -966,7 +969,7 @@ if __name__ == "__main__":
     except Exception as _e2:
         print("  진단 파일 기록 실패:", _e2)
 
-    EVS.sort(key=lambda x: (x["start"], x["city"]))
+    EVS.sort(key=lambda x: (bool(x.get("always")), x["start"], x["city"]))
     TOTAL_EV = len(EVS)
     print("  진행/예정 행사: %d건" % len(EVS))
 
