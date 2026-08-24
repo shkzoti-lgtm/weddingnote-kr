@@ -218,8 +218,10 @@ def event_card(e, show_city=False):
     dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, EV.fmt_short(e["end"]))
     dday = ("<span class='dday'>D-%d</span>" % e["dday"]) if 0 < e["dday"] <= 30 else \
            ("<span class='dday now'>진행중</span>" if e["dday"] <= 0 else "")
-    img = ('<a class="poster" href="/행사/%s/"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
-           % (quote(e["slug"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
+    # 썸네일 클릭 → 무료 초대권 신청(외부). 상세 페이지는 아래 '자세히 보기' 버튼으로만 이동.
+    img = ('<a class="poster" href="%s" target="_blank" rel="noopener nofollow sponsored" '
+           'aria-label="%s 무료 초대권 신청"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
+           % (esc(e["link"]), esc(e["name"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
     city = ("<span class='ctag'>%s</span>" % esc(e["city"])) if show_city else ""
     return f"""<article class="card">{img}<div class="body">
  <div class="tags"><span class="status">모집중</span>{city}{dday}</div>
@@ -227,6 +229,7 @@ def event_card(e, show_city=False):
  <div class="meta">일정 {dates}</div>
  <div class="meta">장소 {esc(e['place'])}</div>
  <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
+ <a class="detail" href="/행사/{quote(e['slug'])}/">박람회 정보 자세히 보기</a>
 </div></article>"""
 
 def cards_html(evs, show_city=False, empty="현재 모집 중인 일정이 없습니다. 새 일정이 확정되면 이곳에 표시됩니다."):

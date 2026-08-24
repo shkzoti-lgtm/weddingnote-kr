@@ -9,6 +9,20 @@ CACHE = os.path.join(HERE, "events_cache.psv")
 BANNER = "https://replyalba.com/banner/"
 PT = "https://replyalba.com/pt/"
 
+def _strip_prefix(prefix, v):
+    """알려진 접두어로 시작할 때만 떼어낸다. 문자열 중간은 건드리지 않는다."""
+    v = (v or "").strip()
+    return v[len(prefix):] if v.startswith(prefix) else v
+
+def _abs_url(prefix, v):
+    """이미 절대 URL이면 그대로 쓰고, 코드/파일명일 때만 접두어를 붙인다.
+       시트에 replyalba 외 매체(cpaad 등) URL이 통째로 들어오는 경우 대응."""
+    v = (v or "").strip()
+    if not v: return ""
+    if v.lower().startswith(("http://", "https://")): return v
+    if v.startswith("//"): return "https:" + v
+    return prefix + v
+
 def _norm_date(s):
     s = (s or "").strip()
     m = re.search(r'(\d{4})\D+(\d{1,2})\D+(\d{1,2})', s)
@@ -47,8 +61,8 @@ def fetch_sheet():
     out = []
     for r in rows[1:]:
         if len(r) <= iL or not r[iN].strip(): continue
-        img = r[iIMG].strip().replace(BANNER, "")
-        link = r[iL].strip().replace(PT, "")
+        img  = _strip_prefix(BANNER, r[iIMG])
+        link = _strip_prefix(PT, r[iL])
         ben = r[iB].strip().replace("|"," ") if (iB >= 0 and len(r) > iB) else ""
         out.append("|".join([r[iR].strip(), r[iN].strip().replace("|","/"),
             _norm_date(r[iS]), _norm_date(r[iE]), r[iP].strip().replace("|"," "), img, link, ben]))
@@ -88,8 +102,8 @@ def load(refresh=True):
         evs.append({
             "city": city, "name": name, "start": sd, "end": ed,
             "place": place,
-            "img": (BANNER + img) if img else "",
-            "link": (PT + code) if code else "/초대권-신청/",
+            "img": _abs_url(BANNER, img),
+            "link": _abs_url(PT, code) or "/초대권-신청/",
             "slug": slugify(name) + "-" + s.replace("-", ""),
             "benefit": benefit,
             "dday": (sd - today).days,
