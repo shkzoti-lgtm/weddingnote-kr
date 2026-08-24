@@ -6,11 +6,13 @@ from urllib.parse import quote
 from data import *
 from seo import *
 import events as EV
+import evdata as ED
 import cpaad as CP
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "site")
 TODAY_D = datetime.date.today()
 TODAY = TODAY_D.isoformat()
+TOTAL_EV = 0      # 전국 등록 일정 수 (히어로 통계용)
 URLS = []
 
 def w(path, content):
@@ -74,40 +76,27 @@ def footer():
     <a href="/개인정보처리방침/">개인정보처리방침</a></div></div>
   <p class="disc">본 사이트는 제휴 광고를 포함하며 일부 링크를 통해 수익이 발생할 수 있습니다.
    방문자에게 추가 비용은 없습니다. 행사 일정과 혜택은 주최 측 사정에 따라 변경될 수 있습니다.</p>
-  <p class="biz">Copyright © {YEAR} {SITE}. All rights reserved.</p>
+  <p class="biz">{BIZ}<br>Copyright © {YEAR} {SITE}. All rights reserved.</p>
  </div></footer>
 <script src="/assets/events.js" defer></script></body></html>"""
 
 # ── 지역 페이지 ─────────────────────────────────────────────────
 def faqs_for(loc):
-    return [
-     ("%s 웨딩박람회는 얼마나 자주 열리나요?"%loc,
-      "%s에서는 %s을 중심으로 주말마다 크고 작은 박람회가 이어집니다. 규모와 참여 업체는 주최에 따라 달라지므로 최신 일정에서 확인하세요."%(loc, VENUE.get(loc,"주요 행사장"))),
-     ("입장료가 있나요?",
-      "대부분 무료 초대권으로 입장합니다. 사전 예약자에게는 우선 상담과 방문 선물 같은 혜택이 제공되는 경우가 많습니다."),
-     ("%s 박람회 방문 전에 무엇을 준비해야 하나요?"%loc,
-      "총 예산 상한선과 희망 예식 날짜 1~3순위, 그리고 반드시 지킬 조건을 부부가 미리 합의해 가면 상담이 빠르고 충동 계약을 막을 수 있습니다."),
-     ("현장에서 꼭 계약해야 하나요?",
-      "아닙니다. 여러 박람회를 비교한 뒤 결정해도 늦지 않습니다. 다만 인기 예식장 날짜는 조기 마감될 수 있어 일정 확인은 서두르는 편이 좋습니다."),
-     ("계약할 때 무엇을 확인해야 하나요?",
-      "촬영 원본·수정본 비용, 드레스 피팅비와 헬퍼비, 예식장 수수료 포함 여부를 확인하고 구두 약속은 계약서 특약란에 남겨야 합니다."),
-     ("사전 신청은 언제까지 해야 하나요?",
-      "대부분 행사 당일 오전까지 가능하지만 인기 박람회는 정원이 조기 마감됩니다. 2~3일 전에 신청하면 원하는 시간대를 배정받기 수월합니다."),
-     ("주차는 어떤가요?",
-      "컨벤션센터와 대형 쇼핑몰은 자체 주차장이 있고 박람회 방문 시 할인되는 경우가 많습니다. 백화점 행사장은 주말 혼잡하니 대중교통을 권합니다."),
-     ("평일과 주말 중 언제 가는 게 좋나요?",
-      "주말은 참여 업체와 사은품이 많고, 평일은 한산해 담당자와 여유롭게 상담할 수 있습니다. 시간이 된다면 평일 오전 방문이 가장 효율적입니다."),
-     ("신청하면 이 사이트가 개인정보를 보관하나요?",
-      "아닙니다. 이 사이트는 일정 안내만 하며 신청은 각 박람회 운영사 공식 페이지에서 진행됩니다. 입력한 정보는 운영사가 관리합니다."),
-    ]
+    v = VENUE.get(loc, "주요 행사장")
+    return [(q.format(loc=loc, v=v), a.format(loc=loc, v=v))
+            for q, a in ED.sample(ED.LOC_FAQ, loc, 8, "locfaq")]
+    faq = [(ED.fix_josa(q), ED.fix_josa(a)) for q, a in faq]
 
-def loc_page(loc, region, path, my_evs=None, total_ev=0):
+def loc_page(loc, region, path, my_evs=None):
     url = DOMAIN + path
     is_hub = (loc == region)
-    r = rnd_for(loc)
-    intro = r.choice(POOL_INTRO)
-    tips  = r.sample(POOL_TIP, r.randint(4,5))
-    cautions = r.sample(POOL_CAUTION, 3)
+    intro    = ED.pick(ED.LOC_INTRO, loc, "intro").format(loc=loc)
+    tips     = ED.sample(ED.LOC_TIP, loc, 8, "tip")
+    cautions = ED.sample(ED.LOC_CAUTION, loc, 9, "cau")
+    h2_tip   = ED.pick(ED.LOC_H2_TIP,  loc).format(loc=loc)
+    h2_cau   = ED.pick(ED.LOC_H2_CAU,  loc).format(loc=loc)
+    h2_faq   = ED.pick(ED.LOC_H2_FAQ,  loc).format(loc=loc)
+    h2_near  = ED.pick(ED.LOC_H2_NEAR, loc).format(loc=loc)
     label = REGION_LABEL.get(region, region)
 
     title = f"{YEAR} {loc} 웨딩박람회 일정, 무료초대권 신청 | {loc} 결혼박람회 총정리"
@@ -126,38 +115,38 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
 
     # 내부링크: 같은 권역 인근 도시
     sibs = [c for c in cities_of(region) if c != loc]
-    near = sibs[:6] if sibs else [n for n,_ in REGIONS if n != loc][:6]
+    ADJ = {"서울": ["경기", "인천", "강원", "충청"],
+           "인천": ["경기", "서울", "충청", "강원"],
+           "경기": ["서울", "인천", "강원", "충청"],
+           "부산": ["경상", "전라", "제주", "충청"],
+           "제주": ["부산", "전라", "경상", "서울"]}
+    near = sibs[:6] if sibs else ADJ.get(loc, [n for n, _ in REGIONS if n != loc][:4])
     near_links = "".join('<a href="/%s/%s/">%s 웨딩박람회</a>' %
                          (region, c, c) if sibs else '<a href="/%s/">%s 웨딩박람회</a>'%(c,c)
                          for c in near)
 
     my_evs = my_evs or []
-    # 개최지 카드 (이 지역 행사들의 실제 행사장에서 추출)
-    _vs, _seen = [], set()
-    for _e in my_evs:
-        _v = EV.venue_of(_e)
-        if _v and _v not in _seen:
-            _seen.add(_v); _vs.append(_v)
-    if not _vs: _vs = [v for v in VENUE_INFO if VENUE_INFO[v][0].find(loc) >= 0][:3]
-    venue_cards = "".join(
-        '<div class="vcard"><h3>%s</h3><p class="vloc">%s</p><p>%s</p><p class="vtip">%s</p></div>'
-        % (esc(v), esc(VENUE_INFO[v][0]), esc(VENUE_INFO[v][1]),
-           esc(VENUE_INFO[v][3] if len(VENUE_INFO[v]) > 3 else VENUE_INFO[v][2]))
-        for v in _vs[:6] if v in VENUE_INFO) or \
-        '<div class="vcard"><h3>%s 지역 행사장</h3><p>%s에서는 컨벤션센터와 백화점 특별행사장을 중심으로 박람회가 열립니다. 정확한 위치는 각 일정 카드에서 확인하세요.</p></div>' % (esc(loc), esc(loc))
-    steps_html = "".join('<li><b>%s</b><span>%s</span></li>' % (esc(t), esc(d)) for t, d in HOW_STEPS)
-    why_html = "".join('<div class="wcard"><i>%02d</i><b>%s</b><p>%s</p></div>' % (i+1, esc(t), esc(d))
-                        for i, (t, d) in enumerate(WHY_US))
-
+    _v = VENUE.get(loc, "주요 행사장")
+    _near2 = (near + ["인근 지역", "가까운 지역"])[:2]
+    loc_facts = [ED.pick(ED.LOC_VENUE_LEAD, loc, "vl").format(loc=loc, v=_v),
+                 ED.pick(ED.LOC_NEAR_LEAD, loc, "nl").format(loc=loc, n1=_near2[0], n2=_near2[1])]
+    loc_facts.append((ED.pick(ED.LOC_COUNT_LEAD, loc, "cl").format(loc=loc, c=len(my_evs)))
+                     if my_evs else ED.pick(ED.LOC_EMPTY_LEAD, loc, "el").format(loc=loc))
+    loc_fact_html = "".join("<p>%s</p>" % f for f in loc_facts)
+    h2_cost_l = ED.pick(ED.H2_COST, loc, "lc")
+    cost_lead_l = ED.pick(ED.COST_LEAD, loc, "lc2")
+    costs_l = ED.sample(ED.COST_NOTE, loc, 6, "lcost")
+    cost_html_l = "".join(f"<div class='tip'><h3>{t}</h3><p>{v}</p></div>" for t, v in costs_l)
+    _th_t, _th_p = ED.pick(ED.LOC_THEME, loc, "theme")
+    theme_h2 = "%s — %s" % (loc, _th_t)
+    theme_html = "".join("<p>%s</p>" % esc(p) for p in _th_p)
     static_cards = cards_html(my_evs, show_city=bool(cs),
         empty=f"{loc} 지역 일정을 준비 중입니다. 새로운 일정이 확정되면 이곳에 바로 표시됩니다.")
     ev_count = len(my_evs)
     tips_html = "".join(f"<div class='tip'><h3>{t}</h3><p>{d}</p></div>" for t,d in tips)
     caution_html = "".join(f"<li>{c}</li>" for c in cautions)
     faq = faqs_for(loc)
-    faq_html = "".join(
-      f"<details><summary><span class='qmark'>Q</span><span class='qtxt'>{q}</span></summary>"
-      f"<div class='a'><span class='amark'>A</span><span>{a}</span></div></details>" for q,a in faq)
+    faq_html = "".join(f"<details><summary>{q}</summary><div class='a'>{a}</div></details>" for q,a in faq)
 
     lds = [ld_breadcrumb(bc), ld_faq(faq), ld_howto(loc), ld_website()]
     if my_evs: lds.append(ld_itemlist(loc, [x["name"] for x in my_evs]))
@@ -173,67 +162,55 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
     무료 초대권 정보를 매일 갱신해 정리합니다.</p>
    <div class="stats">
      <div><b>{ev_count}</b><span>{loc} 진행 예정</span></div>
-     <div><b>{total_ev}</b><span>전국 등록 일정</span></div>
+     <div><b>{TOTAL_EV}</b><span>전국 등록 일정</span></div>
      <div><b>100%</b><span>무료 초대권</span></div>
-     <div><b>{TODAY}</b><span>최근 갱신</span></div>
+     <div><b>{TODAY_D.month}.{TODAY_D.day}</b><span>최근 갱신</span></div>
    </div>
   </div>
  </section>
 
- <section class="wrap sched-top">
-  <p class="seclabel">SCHEDULE</p>
+ <section class="wrap"><div class="factbox">{loc_fact_html}</div></section>
+
+ <section class="wrap">{aeo_block(loc, region)}</section>
+
+ <section class="wrap">
   <h2 class="sec">{loc} 웨딩박람회 최신 일정 {("("+str(ev_count)+"건)") if ev_count else ""}</h2>
   <p class="sub">모집 중인 일정만 표시됩니다. 카드를 눌러 상세 정보와 무료 초대권을 확인하세요.</p>
   <div class="cards" id="event-cards" data-cities="{cities_csv}" data-loc="{loc}">{static_cards}</div>
  </section>
 
- <section class="wrap">{aeo_block(loc, region)}</section>
-
  <section class="wrap">
-  <p class="seclabel">VENUES</p>
-  <h2 class="sec">{loc} 주요 박람회 개최지</h2>
-  <p class="sub">자주 이용되는 행사장의 위치와 특징입니다.</p>
-  <div class="venues">{venue_cards}</div>
- </section>
-
- <section class="wrap">
-  <p class="seclabel">COMPARE</p>
   <h2 class="sec">{loc} 웨딩박람회 유형 비교</h2>
   {compare_table(loc)}
  </section>
 
  <section class="wrap">
-  <p class="seclabel">HOW IT WORKS</p>
-  <h2 class="sec">참여 방법 3단계</h2>
-  <p class="sub">처음 방문하는 예비부부도 어렵지 않습니다.</p>
-  <ol class="steps">{steps_html}</ol>
- </section>
-
- <section class="wrap">
-  <p class="seclabel">CHECKPOINT</p>
-  <h2 class="sec">{loc} 방문 전 준비 체크포인트</h2>
+  <h2 class="sec">{h2_tip}</h2>
   <div class="tips">{tips_html}</div>
  </section>
 
  <section class="wrap">
-  <h2 class="sec">{loc} 계약 전 주의사항</h2>
+  <h2 class="sec">{h2_cau}</h2>
   <ul class="cautions">{caution_html}</ul>
  </section>
 
  <section class="wrap">
-  <p class="seclabel">WHY WEDDINGNOTE</p>
-  <h2 class="sec">웨딩노트가 정리하는 방식</h2>
-  <div class="whygrid">{why_html}</div>
+  <div class="theme"><h2>{theme_h2}</h2>{theme_html}</div>
  </section>
 
  <section class="wrap">
-  <p class="seclabel">FAQ</p>
-  <h2 class="sec">{loc} 웨딩박람회 자주 묻는 질문</h2>
+  <h2 class="sec">{h2_cost_l}</h2>
+  <p class="sub">{cost_lead_l}</p>
+  <div class="tips">{cost_html_l}</div>
+ </section>
+
+ <section class="wrap">
+  <h2 class="sec">{h2_faq}</h2>
   <div class="faq">{faq_html}</div>
  </section>
 
  <section class="wrap">
-  <h2 class="sec">가까운 지역 일정도 확인해 보세요</h2>
+  <h2 class="sec">{h2_near}</h2>
   <div class="chips near">{near_links}</div>
  </section>
 </main>
@@ -244,20 +221,25 @@ def loc_page(loc, region, path, my_evs=None, total_ev=0):
 
 # ── 행사 카드 정적 렌더 (검색봇이 읽는 HTML) ──────────────────────
 def event_card(e, show_city=False):
-    d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
-    dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, EV.fmt_short(e["end"]))
-    dday = ("<span class='dday'>D-%d</span>" % e["dday"]) if 0 < e["dday"] <= 30 else \
-           ("<span class='dday now'>진행중</span>" if e["dday"] <= 0 else "")
-    img = ('<a class="poster" href="/행사/%s/"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
-           % (quote(e["slug"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
+    if e.get("always"):
+        dates = e.get("date_text") or "상시 진행"
+        dday = "<span class='dday now'>상시</span>"
+    else:
+        d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
+        dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, EV.fmt_short(e["end"]))
+        dday = ("<span class='dday'>D-%d</span>" % e["dday"]) if 0 < e["dday"] <= 30 else \
+               ("<span class='dday now'>진행중</span>" if e["dday"] <= 0 else "")
+    # 썸네일 클릭 → 무료 초대권 신청(외부). 상세 페이지는 아래 '자세히 보기' 버튼으로만 이동.
+    img = ('<a class="poster" href="%s" target="_blank" rel="noopener nofollow sponsored" '
+           'aria-label="%s 무료 초대권 신청"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
+           % (esc(e["link"]), esc(e["name"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
     city = ("<span class='ctag'>%s</span>" % esc(e["city"])) if show_city else ""
-    ben = ("<div class='benefit'>혜택 %s</div>" % esc(e.get("benefit",""))) if e.get("benefit") else ""
+    ben = ('<div class="benefit">혜택 %s</div>' % esc(e["benefit"])) if e.get("benefit") else ""
     return f"""<article class="card">{img}<div class="body">
  <div class="tags"><span class="status">모집중</span>{city}{dday}</div>
  <h3><a href="/행사/{quote(e['slug'])}/">{esc(e['name'])}</a></h3>
  <div class="meta">일정 {dates}</div>
- <div class="meta">장소 {esc(e['place'])}</div>
- {ben}
+ <div class="meta">장소 {esc(e['place'])}</div>{ben}
  <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
  <a class="detail" href="/행사/{quote(e['slug'])}/">박람회 정보 자세히 보기</a>
 </div></article>"""
@@ -266,9 +248,26 @@ def cards_html(evs, show_city=False, empty="현재 모집 중인 일정이 없�
     if not evs: return '<div class="loading">%s</div>' % empty
     return "".join(event_card(e, show_city) for e in evs)
 
+_DAYMAP = [("월", "Monday"), ("화", "Tuesday"), ("수", "Wednesday"), ("목", "Thursday"),
+           ("금", "Friday"), ("토", "Saturday"), ("일", "Sunday")]
+
+def _bydays(txt):
+    """'매주 토요일/일요일' 같은 표기에서 요일을 뽑는다. 못 찾으면 주말로 둔다."""
+    t = txt or ""
+    days = ["https://schema.org/%s" % en for ko, en in _DAYMAP if (ko + "요일") in t]
+    if not days and "주말" in t:
+        days = ["https://schema.org/Saturday", "https://schema.org/Sunday"]
+    return days or ["https://schema.org/Saturday", "https://schema.org/Sunday"]
+
 def ld_event(e):
     return json.dumps({"@context":"https://schema.org","@type":"Event",
-      "name":e["name"], "startDate":e["start"].isoformat(), "endDate":e["end"].isoformat(),
+      "name":e["name"],
+      **({"eventSchedule": {"@type": "Schedule",
+                            "repeatFrequency": "P1W",
+                            "byDay": _bydays(e.get("date_text", "")),
+                            "startDate": e["start"].isoformat()}}
+         if e.get("always") else
+         {"startDate": e["start"].isoformat(), "endDate": e["end"].isoformat()}),
       "eventStatus":"https://schema.org/EventScheduled",
       "eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode",
       "location":{"@type":"Place","name":e["place"],
@@ -280,101 +279,86 @@ def ld_event(e):
                 "availability":"https://schema.org/InStock","url":e["link"]},
       "organizer":{"@type":"Organization","name":SITE}}, ensure_ascii=False)
 
-
-# ── 행사 상세 보조 함수 ─────────────────────────────────────
-def map_links(place):
-    q = quote(place)
-    return ('<a href="https://map.naver.com/p/search/%s" target="_blank" rel="noopener">네이버 지도</a>'
-            '<a href="https://map.kakao.com/?q=%s" target="_blank" rel="noopener">카카오맵</a>'
-            '<a href="https://www.google.com/maps/search/?api=1&query=%s" target="_blank" rel="noopener">구글 지도</a>'
-            % (q, q, q))
-
-def district_of(place):
-    m = re.search(r'([가-힣]+(?:구|시|군))\s', place + " ")
-    return m.group(1) if m else ""
-
-def location_text(e):
-    d = district_of(e["place"])
-    desc = DISTRICT_DESC.get(d, "")
-    t = "%s 일대에서 진행됩니다." % e["place"]
-    if d: t += " 행정구역상 %s에 해당합니다." % d
-    if desc: t += " %s입니다." % desc
-    return t
-
-MONTH_NOTE = {
- 1:"연초 결혼 준비를 시작하는 예비부부가 많이 찾는 시기입니다.",
- 2:"봄 예식을 앞두고 막바지 준비를 정리하기 좋은 시기입니다.",
- 3:"봄 성수기를 앞두고 참여 업체가 늘어나는 시기입니다.",
- 4:"봄 예식 시즌과 맞물려 규모가 큰 박람회가 몰리는 시기입니다.",
- 5:"가을 예식을 준비하는 예비부부의 방문이 많은 시기입니다.",
- 6:"여름 비수기를 앞두고 혜택이 강화되는 경우가 많습니다.",
- 7:"여름 휴가철 전 준비를 마무리하기 좋은 시기입니다.",
- 8:"가을 성수기 예식을 준비하기에 적절한 시기입니다.",
- 9:"가을 예식 시즌과 함께 참여 업체가 가장 많아지는 시기입니다.",
- 10:"내년 봄 예식을 준비하는 예비부부가 많이 찾습니다.",
- 11:"연말 프로모션과 함께 혜택이 커지는 시기입니다.",
- 12:"연말·연초 계약 혜택을 노리기 좋은 시기입니다.",
-}
-def intro_text(e):
-    d1 = EV.fmt(e["start"]); d2 = EV.fmt(e["end"])
-    span = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
-    t = "%s 진행되는 「%s」의 일정과 정보를 정리했습니다. " % (span, e["name"])
-    t += MONTH_NOTE.get(e["start"].month, "") + " "
-    t += "웨딩홀과 스튜디오·드레스·메이크업, 예물과 혼수, 신혼여행까지 여러 업체를 한자리에서 상담할 수 있습니다."
-    if e.get("benefit"): t += " 이번 회차에는 %s 혜택이 안내되고 있습니다." % e["benefit"]
-    return t
-
-def is_weekday(e):
-    return e["start"].weekday() < 5 and e["start"] == e["end"]
-
 # ── 개별 행사 상세 페이지 ────────────────────────────────────────
-def event_page(e, same_city, all_evs=None):
-    path = "/행사/%s/" % e["slug"]; url = DOMAIN + path
+def event_page(e, same_city):
+    """행사 상세 — 페이지마다 내용이 달라지도록 4개 층을 적용한다.
+       ① 주소 파싱 실데이터 ② 날짜 파생 ③ 규모 분기 ④ 변형 풀 해시 배정"""
+    slug = e["slug"]
+    path = "/행사/%s/" % slug; url = DOMAIN + path
     region = region_of_city(e["city"])
-    d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
-    dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
-    title = "%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회" % (e["name"], EV.fmt_short(e["start"]), e["city"])
-    desc = "%s은 %s %s에서 열립니다. 무료 초대권 신청과 웨딩홀·스드메 상담 정보를 확인하세요." % (
-        e["name"], dates, e["place"])
+    if e.get("always"):
+        d1 = d2 = ""
+        dates = e.get("date_text") or "상시 진행"
+    else:
+        d1, d2 = EV.fmt(e["start"]), EV.fmt(e["end"])
+        dates = d1 if e["start"] == e["end"] else "%s ~ %s" % (d1, d2)
+
+    ad = ED.parse_addr(e["place"])
+    if e.get("always"):
+        # 상시 행사는 날짜 파생 문장(요일·일수·성수기)이 성립하지 않는다
+        df = None
+        _lbl = e.get("date_text") or "상시 진행"
+        fact_sents = ED.addr_sentences(ad, e["city"], slug) + [
+            "이 행사는 특정 날짜가 아니라 %s 일정으로 진행됩니다." % _lbl,
+            "방문 전 신청 페이지에서 해당 주 운영 여부를 확인해 주세요.",
+        ]
+    else:
+        df = ED.date_facts(e["start"], e["end"])
+        fact_sents = ED.addr_sentences(ad, e["city"], slug) + ED.date_sentences(df, slug)
+    scale = ED.scale_sentence(e["name"])
+    if scale: fact_sents.append(scale)
+
+    title = ("%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회"
+             % (e["name"], "상시 진행" if e.get("always")
+                else EV.fmt_short(e["start"]), e["city"]))
+    desc = "%s%s %s %s에서 열립니다. %s" % (e["name"], ED.josa(e["name"]),
+        dates, ad["gu"] or e["city"],
+        ED.pick(["무료 초대권 신청과 웨딩홀·스드메 상담 정보를 확인하세요.",
+                 "초대권 사전 신청 방법과 방문 전 확인 사항을 정리했습니다.",
+                 "무료 입장 신청과 상담 준비 항목을 안내합니다."], slug, "desc"))
     kw = "%s, %s 웨딩박람회, %s 일정, %s 무료초대권, %s결혼박람회" % (
         e["name"], e["city"], e["name"], e["name"], e["city"])
+
     bc = [("홈", DOMAIN+"/"), (region, DOMAIN+"/%s/"%region)]
     if e["city"] != region: bc.append((e["city"], DOMAIN+"/%s/%s/"%(region, e["city"])))
     bc.append((e["name"], url))
-    others = [x for x in same_city if x["slug"] != e["slug"]][:6]
+
+    others = [x for x in same_city if x["slug"] != slug][:6]
     rel = "".join('<li><a href="/행사/%s/">%s <span>%s</span></a></li>'
                   % (quote(x["slug"]), esc(x["name"]), EV.fmt_short(x["start"])) for x in others)
-    _wk = []
-    for x in (all_evs or []):
-        if x["slug"] == e["slug"] or x["city"] == e["city"]: continue
-        if abs((x["start"] - e["start"]).days) <= 3: _wk.append(x)
-    week_rel = "".join('<li><a href="/행사/%s/">%s <span>%s · %s</span></a></li>'
-                       % (quote(x["slug"]), esc(x["name"]), esc(x["city"]), EV.fmt_short(x["start"]))
-                       for x in _wk[:6])
-    _wd = is_weekday(e)
-    faq = [
-      ("%s은 언제 열리나요?" % e["name"],
-       "%s에 진행됩니다. %s" % (dates,
-         "평일 일정이라 비교적 한산하게 부스를 둘러볼 수 있습니다." if _wd
-         else "주말 일정이라 참여 업체와 사은품이 많은 편이며, 오전 방문이 대기가 짧습니다.")),
-      ("행사장은 어디인가요?",
-       "%s에서 진행됩니다. %s" % (e["place"],
-         DISTRICT_DESC.get(district_of(e["place"]), "방문 전 주차 여건과 대중교통 동선을 확인하면 좋습니다.") + ("입니다." if DISTRICT_DESC.get(district_of(e["place"])) else ""))),
-      ("무료 초대권은 어떻게 받나요?",
-       "이 페이지의 「무료 초대권 신청하기」를 누르면 운영사 공식 신청 페이지로 이동합니다. 이름과 연락처를 남기면 초대권이 발급되며 별도 비용은 없습니다."),
-      ("초대권으로 어떤 혜택을 받을 수 있나요?",
-       (("이번 회차 안내 혜택은 %s입니다. " % e["benefit"]) if e.get("benefit") else "") +
-       "일반적으로 현장 계약 시 스드메 패키지 할인, 예식장 식대 혜택, 혼수 견적 비교, 방문 사은품 등이 제공됩니다. 혜택은 회차와 업체에 따라 달라집니다."),
-      ("예식 날짜가 아직 정해지지 않았어도 방문할 수 있나요?",
-       "네, 가능합니다. 박람회는 정보 수집 단계에서 방문하는 분이 가장 많습니다. 예식 예정 월만 대략 정해 두어도 견적 비교와 식장 답사에 충분히 활용할 수 있습니다."),
-      ("현장에서 꼭 계약해야 하나요?",
-       "아닙니다. 견적만 받고 비교한 뒤 결정해도 됩니다. 다만 인기 예식장의 날짜는 조기 마감될 수 있어 일정 확인은 서두르는 편이 좋습니다."),
-    ]
-    faq_html = "".join("<details><summary><span class='qmark'>Q</span><span class='qtxt'>%s</span></summary>"
-                       "<div class='a'><span class='amark'>A</span><span>%s</span></div></details>" % (q,a) for q,a in faq)
-    lds = [ld_event(e), ld_breadcrumb(bc), ld_faq(faq), ld_howto(e["city"])]
+
+    # ── FAQ: 20종 풀에서 5개를 해시로 배정 ──
+    faq = [(q.format(n=e["name"], p=e["place"], c=e["city"]),
+            a.format(n=e["name"], p=e["place"], c=e["city"]))
+           for q, a in ED.sample(ED.FAQ_POOL, slug, 7, "faq")]
+    faq = [(ED.fix_josa(q), ED.fix_josa(a)) for q, a in faq]
+    faq_html = "".join("<details><summary>%s</summary><div class='a'>%s</div></details>"
+                       % (esc(q), esc(a)) for q, a in faq)
+
+    # ── 변형 블록 ──
+    h2_apply = ED.pick(ED.H2_APPLY, slug); h2_check = ED.pick(ED.H2_CHECK, slug)
+    h2_prep  = ED.pick(ED.H2_PREP,  slug); h2_info  = ED.pick(ED.H2_INFO,  slug)
+    h2_faq   = ED.pick(ED.H2_FAQ,   slug)
+    lead     = ED.pick(ED.APPLY_LEAD, slug, "lead")
+    steps    = ED.pick(ED.APPLY_STEPS, slug, "step")
+    cautions = ED.sample(ED.CAUTION, slug, 7, "cau")
+    preps    = ED.sample(ED.PREP,    slug, 6, "prep")
+    closing  = ED.pick(ED.CLOSING, slug, "cl")
+    h2_cost  = ED.pick(ED.H2_COST, slug)
+    cost_lead = ED.pick(ED.COST_LEAD, slug, "cl2")
+    costs    = ED.sample(ED.COST_NOTE, slug, 5, "cost")
+    cost_html = "".join("<div class='tip'><h3>%s</h3><p>%s</p></div>" % (esc(t), esc(v)) for t, v in costs)
+
+    steps_html = "".join("<li>%s</li>" % esc(s) for s in steps)
+    cau_html   = "".join("<li>%s</li>" % esc(c) for c in cautions)
+    prep_html  = "".join("<li>%s</li>" % esc(p) for p in preps)
+    fact_html  = "".join("<p>%s</p>" % esc(s) for s in fact_sents)
+
+    lds = [ld_event(e), ld_breadcrumb(bc), ld_faq(faq), ld_howto(e["city"]),
+           ld_itemlist(e["name"], [x["name"] for x in others] or [e["name"]])]
     hero_img = ('<div class="ephoto"><img src="%s" alt="%s 포스터" loading="lazy"></div>'
                 % (esc(e["img"]), esc(e["name"]))) if e["img"] else ""
+
     body = f"""{header(region, "" if e["city"]==region else e["city"])}
 {breadcrumb_html(bc)}
 <main>
@@ -383,133 +367,108 @@ def event_page(e, same_city, all_evs=None):
    <p class="eyebrow">{esc(e['city'])} 웨딩박람회 · 모집중</p>
    <h1>{esc(e['name'])}</h1>
    <table class="factsheet">
-    <tr><th>행사일</th><td>{dates}</td></tr>
+    <tr><th>행사일</th><td>{dates}{(' · ' + str(df['days']) + '일간') if df and df['days'] > 1 else ''}</td></tr>
     <tr><th>장소</th><td>{esc(e['place'])}</td></tr>
     <tr><th>지역</th><td><a href="/{region}/{'' if e['city']==region else e['city']+'/'}">{esc(e['city'])} 웨딩박람회 전체 일정</a></td></tr>
     <tr><th>입장</th><td>무료 초대권 사전 신청</td></tr>
-    {("<tr><th>혜택</th><td>"+esc(e.get("benefit",""))+"</td></tr>") if e.get("benefit") else ""}
    </table>
    <a class="btn big" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청하기</a>
   </div>
  </section>
  {('<section class="wrap">'+hero_img+'</section>') if hero_img else ''}
  <section class="wrap">
+  <h2 class="sec">{esc(h2_info)}</h2>
+  <div class="factbox">{fact_html}</div>
+ </section>
+ <section class="wrap">
   <div class="aeo">
-   <h2>{esc(e['name'])}, 어떻게 신청하나요?</h2>
-   <p class="ans">{esc(e['name'])}은 <b>{dates}</b> {esc(e['place'])}에서 열립니다.
-    입장은 무료 초대권 사전 신청으로 진행되며, 현장에서 웨딩홀과 스드메, 예물·혼수, 신혼여행 상담을 한 번에 받을 수 있습니다.</p>
+   <h2>{esc(e['name'])}, {esc(h2_apply)}</h2>
+   <p class="ans">{esc(e['name'])}{ED.josa(e['name'])} <b>{dates}</b> {esc(e['place'])}에서 열립니다. {esc(lead)}</p>
    <p class="ans-sub"><b>신청 방법</b></p>
-   <ol><li>위 무료 초대권 신청 버튼을 누릅니다.</li>
-       <li>이름과 연락처, 희망 방문 시간을 남깁니다.</li>
-       <li>예산 상한과 희망 예식 날짜를 정리해 커플이 함께 방문합니다.</li></ol>
-   <p class="pnote">※ 일정과 혜택은 주최 측 사정에 따라 변경될 수 있습니다.</p>
+   <ol>{steps_html}</ol>
+   <p class="pnote">※ {esc(closing)}</p>
   </div>
  </section>
  <section class="wrap">
-  <p class="seclabel">ABOUT</p>
-  <h2 class="sec">{esc(e['name'])} 안내</h2>
-  <p class="para">{esc(intro_text(e))}</p>
+  <h2 class="sec">{esc(h2_prep)}</h2>
+  <ul class="cautions">{prep_html}</ul>
  </section>
-
  <section class="wrap">
-  <p class="seclabel">LOCATION</p>
-  <h2 class="sec">위치 안내</h2>
-  <p class="para">{esc(location_text(e))}</p>
-  <p class="sub">방문 전 정확한 위치를 지도에서 확인해 보세요.</p>
-  <div class="maplinks">{map_links(e['place'])}</div>
+  <h2 class="sec">{esc(h2_check)}</h2>
+  <ul class="cautions">{cau_html}</ul>
  </section>
-
  <section class="wrap">
-  <p class="seclabel">CHECKPOINT</p>
-  <h2 class="sec">방문 전 체크포인트</h2>
-  <ul class="cautions">
-   <li>보증 인원과 식대 부가세 포함 여부를 확인하세요.</li>
-   <li>촬영 원본·수정본 비용과 드레스 피팅비·헬퍼비 포함 여부를 물어보세요.</li>
-   <li>구두로 약속받은 사은품은 계약서 특약란에 기재해야 합니다.</li>
-   <li>취소 시점별 위약금과 예식일 변경 규정을 미리 확인하세요.</li>
-  </ul>
+  <h2 class="sec">{esc(h2_cost)}</h2>
+  <p class="sub">{esc(cost_lead)}</p>
+  <div class="tips">{cost_html}</div>
  </section>
- {('<section class="wrap"><p class="seclabel">NEARBY</p><h2 class="sec">'+esc(e['city'])+' 다른 웨딩박람회 일정</h2><ul class="rellist">'+rel+'</ul></section>') if rel else ''}
- {('<section class="wrap"><p class="seclabel">SAME WEEK</p><h2 class="sec">같은 주 다른 지역 박람회</h2><ul class="rellist">'+week_rel+'</ul></section>') if week_rel else ''}
-
- <section class="wrap">
-  <div class="applybox">
-   <h2>무료 초대권 신청</h2>
-   <p>{esc(e['name'])}는 입장료 없이 무료 초대권만으로 입장할 수 있습니다.
-      현장 계약 의무는 없으며, 정보 수집 목적으로 방문하셔도 좋습니다.</p>
-   <a class="btn big" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청 페이지로 이동</a>
-  </div>
- </section>
- <section class="wrap"><p class="seclabel">FAQ</p><h2 class="sec">자주 묻는 질문</h2><div class="faq">{faq_html}</div></section>
+ {('<section class="wrap"><h2 class="sec">'+esc(e['city'])+' 다른 웨딩박람회 일정</h2><ul class="rellist">'+rel+'</ul></section>') if rel else ''}
+ <section class="wrap"><h2 class="sec">{esc(h2_faq)}</h2><div class="faq">{faq_html}</div></section>
 </main>
 {footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
     URLS.append(url)
 
 # ── 행사장별 페이지 ─────────────────────────────────────────────
-def venue_page(venue, evs, all_venues=None):
+VENUE_ALL = []
+def venue_page(venue, evs):
     slug = EV.slugify(venue)
     path = "/행사장/%s/" % slug; url = DOMAIN + path
+    evs = sorted(evs, key=lambda x: x["start"])
+    cities = []
+    for e in evs:
+        if e["city"] not in cities: cities.append(e["city"])
+    c1 = cities[0] if cities else "전국"
     title = "%s 웨딩박람회 일정 %d건 | 무료초대권 - %s" % (venue, len(evs), SITE)
     desc = "%s에서 열리는 웨딩박람회 일정 %d건을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % (venue, len(evs))
     kw = "%s 웨딩박람회, %s 결혼박람회, %s 웨딩박람회 일정, %s 무료초대권" % (venue, venue, venue, venue)
     bc = [("홈",DOMAIN+"/"),("행사장",DOMAIN+"/행사장/"),(venue,url)]
-    info = VENUE_INFO.get(venue)
-    loc_txt = info[0] if info else "전국"
-    desc_txt = info[1] if info else ("%s에서 열리는 웨딩박람회 일정을 모았습니다. 참여 업체와 규모는 회차마다 다르므로 아래 일정에서 확인하세요." % venue)
-    park_txt = info[2] if info else "방문 전 주차 여건과 대중교통 동선을 확인하면 좋습니다."
-    other_venues = "".join('<a href="/행사장/%s/">%s</a>' % (quote(EV.slugify(v)), esc(v))
-                           for v in (all_venues or []) if v != venue)
-    faqv = [("%s 웨딩박람회는 얼마나 자주 열리나요?" % venue,
-             "%s에서는 주최사에 따라 매주 또는 격주로 박람회가 열립니다. 현재 확인된 일정은 %d건입니다." % (venue, len(evs))),
-            ("입장료가 있나요?", "무료 초대권을 사전 신청하면 무료로 입장할 수 있습니다."),
-            ("%s 방문 시 주차는 어떤가요?" % venue, park_txt)]
-    faqv_html = "".join("<details><summary><span class='qmark'>Q</span><span class='qtxt'>%s</span></summary>"
-                        "<div class='a'><span class='amark'>A</span><span>%s</span></div></details>" % (q,a)
-                        for q,a in faqv)
-    lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs]), ld_faq(faqv)]
+    lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs])]
+
+    # 사실 문단 — 실제 데이터에서만 뽑는다
+    facts = [ED.pick(ED.VEN_LEAD, venue, "vl").format(v=venue, c1=c1),
+             ED.pick(ED.VEN_COUNT, venue, "vc").format(v=venue, n=len(evs))]
+    if evs:
+        d1, d2 = EV.fmt(evs[0]["start"]), EV.fmt(evs[-1]["end"])
+        facts.append(ED.pick(ED.VEN_SPAN, venue, "vs").format(d1=d1, d2=d2) if d1 != d2
+                     else ED.pick(ED.VEN_ONE, venue, "vo").format(d1=d1))
+    if len(cities) > 1:
+        facts.append("확인된 회차는 %s 지역에 걸쳐 있습니다." % "·".join(cities[:4]))
+    elif cities:
+        facts.append("%s 지역 예비부부께서 방문하기 좋은 위치입니다." % c1)
+    wk = sorted({"%s요일" % "월화수목금토일"[e["start"].weekday()]
+                 for e in evs if not e.get("always")})
+    if wk: facts.append("시작 요일은 %s 기준으로 잡혀 있습니다." % "·".join(wk))
+    fact_html = "".join("<p>%s</p>" % f for f in facts)
+
+    tips = ED.sample(ED.VEN_TIP, venue, 6, "vt")
+    caus = ED.sample(ED.VEN_CAU, venue, 6, "vcau")
+    faqs = [(ED.fix_josa(q.format(v=venue)), ED.fix_josa(a.format(v=venue)))
+            for q, a in ED.sample(ED.VEN_FAQ, venue, 6, "vf")]
+    lds.append(ld_faq(faqs))
+    h2i = ED.pick(ED.VEN_H2_INFO, venue).format(v=venue)
+    h2t = ED.pick(ED.VEN_H2_TIP,  venue).format(v=venue)
+    h2c = ED.pick(ED.VEN_H2_CAU,  venue).format(v=venue)
+    h2f = ED.pick(ED.VEN_H2_FAQ,  venue).format(v=venue)
+    tips_html = "".join(f"<div class='tip'><h3>{esc(t)}</h3><p>{esc(d)}</p></div>" for t, d in tips)
+    cau_html  = "".join(f"<li>{esc(c)}</li>" for c in caus)
+    faq_html  = "".join(f"<details><summary>{esc(q)}</summary><div class='a'>{esc(a)}</div></details>" for q, a in faqs)
+    other = "".join('<a href="/행사장/%s/">%s 일정</a>' % (quote(EV.slugify(v)), esc(v))
+                    for v in VENUE_ALL if v != venue)
     body = f"""{header()}
 {breadcrumb_html(bc)}
 <main>
  <section class="hero"><div class="wrap">
-  <p class="eyebrow">행사장별 일정 · {loc_txt}</p>
+  <p class="eyebrow">행사장별 일정</p>
   <h1>{esc(venue)} 웨딩박람회 일정</h1>
   <p class="lead">{esc(venue)}에서 열리는 웨딩박람회 {len(evs)}건입니다. 날짜를 확인하고 무료 초대권을 신청하세요.</p>
  </div></section>
- <section class="wrap"><div class="aeo">
-  <h2>{esc(venue)}에서는 어떤 웨딩박람회가 열리나요?</h2>
-  <p class="ans">{desc_txt}</p>
-  <p class="ans-sub"><b>방문 전 알아두면 좋은 점</b></p>
-  <ol><li>{park_txt}</li>
-      <li>주말 오전 방문이 대기가 짧고 상담이 여유롭습니다.</li>
-      <li>무료 초대권을 미리 신청하면 우선 상담과 방문 선물 혜택을 받을 수 있습니다.</li></ol>
-  <p class="pnote">※ 일정과 참여 업체는 주최 측 사정에 따라 변경될 수 있습니다.</p>
- </div></section>
- <section class="wrap">
-  <p class="seclabel">SCHEDULE</p>
-  <h2 class="sec">{esc(venue)} 진행 예정 일정 ({len(evs)}건)</h2>
-  <div class="cards">{cards_html(evs, show_city=True)}</div>
- </section>
- <section class="wrap">
-  <p class="seclabel">CHECKPOINT</p>
-  <h2 class="sec">{esc(venue)} 방문 체크포인트</h2>
-  <ul class="cautions">
-   <li>보증 인원과 식대 부가세 포함 여부를 확인하세요.</li>
-   <li>촬영 원본·수정본 비용과 드레스 피팅비 포함 여부를 물어보세요.</li>
-   <li>구두 약속은 계약서 특약란에 기재해야 합니다.</li>
-   <li>여러 박람회를 비교한 뒤 결정해도 늦지 않습니다.</li>
-  </ul>
- </section>
- <section class="wrap">
-  <p class="seclabel">FAQ</p>
-  <h2 class="sec">{esc(venue)} 자주 묻는 질문</h2>
-  <div class="faq">{faqv_html}</div>
- </section>
- <section class="wrap">
-  <p class="seclabel">OTHER VENUES</p>
-  <h2 class="sec">다른 행사장 일정</h2>
-  <div class="chips near">{other_venues}</div>
- </section>
+ <section class="wrap"><h2 class="sec">{esc(h2i)}</h2><div class="factbox">{fact_html}</div></section>
+ <section class="wrap"><div class="cards">{cards_html(evs, show_city=True)}</div></section>
+ <section class="wrap"><h2 class="sec">{esc(h2t)}</h2><div class="tips">{tips_html}</div></section>
+ <section class="wrap"><h2 class="sec">{esc(h2c)}</h2><ul class="cautions">{cau_html}</ul></section>
+ <section class="wrap"><h2 class="sec">{esc(h2f)}</h2><div class="faq">{faq_html}</div></section>
+ <section class="wrap"><h2 class="sec">다른 행사장 일정</h2><div class="chips near">{other}</div></section>
 </main>{footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
     URLS.append(url)
@@ -524,7 +483,15 @@ def venue_index(vmap):
      <section class="hero"><div class="wrap"><p class="eyebrow">행사장</p>
       <h1>전국 주요 웨딩박람회장</h1>
       <p class="lead">코엑스·SETEC·킨텍스·벡스코 등 주요 행사장별로 일정을 모아 확인할 수 있습니다.</p></div></section>
-     <section class="wrap"><div class="guidegrid">{items}</div></section></main>{footer()}"""
+     <section class="wrap"><div class="guidegrid">{items}</div></section>
+     <section class="wrap"><h2 class="sec">행사장별로 보면 좋은 이유</h2><div class="factbox">
+      <p>같은 행사장에서도 회차마다 주최와 참여 업체 구성이 달라집니다. 행사장을 기준으로 일정을 모아 보면 이동 경로가 익숙한 곳에서 여러 회차를 비교하실 수 있습니다.</p>
+      <p>현재 {len(vmap)}개 행사장에서 진행 예정 일정이 확인됩니다. 총 {sum(len(v) for v in vmap.values())}건이며, 각 행사장 페이지에서 날짜와 지역을 함께 확인하실 수 있습니다.</p>
+      <p>행사장이 넓은 경우 입구에서 배치도를 먼저 확인하고 볼 순서를 정하시면 이동에만 쓰는 시간을 줄일 수 있습니다.</p>
+      <p>주말 회차는 주차장이 일찍 차는 편이라 대중교통 경로를 함께 확인해 두시면 좋습니다.</p></div></section>
+     <section class="wrap"><h2 class="sec">기간으로 찾기</h2><div class="chips near">
+      <a href="/이번주-웨딩박람회/">이번주 일정</a><a href="/일정/">월별 일정</a><a href="/가이드/">결혼준비 가이드</a></div></section>
+     </main>{footer()}"""
     w(path+"index.html", head("전국 주요 웨딩박람회장 일정 | "+SITE,
       "코엑스, SETEC, 킨텍스, 벡스코, 송도컨벤시아 등 전국 주요 웨딩박람회장별 일정을 모았습니다.",
       "웨딩박람회장, 코엑스 웨딩박람회, 킨텍스 웨딩박람회, SETEC 웨딩박람회, 벡스코 웨딩박람회", url,
@@ -540,11 +507,50 @@ def week_page(evs):
     title = "이번주 웨딩박람회 일정 %d건 (%s~%s) | %s" % (len(cur), EV.fmt_short(mon), EV.fmt_short(sun), SITE)
     desc = "이번주와 다음주 전국에서 열리는 웨딩박람회 %d건을 모았습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요." % len(cur)
     bc=[("홈",DOMAIN+"/"),("이번주 웨딩박람회",url)]
+
+    # 이 페이지만의 사실 — 주말/평일, 요일 분포, 남은 일수
+    wknd = [x for x in cur if x["start"].weekday() >= 5]
+    today_run = [x for x in cur if x["start"] <= TODAY_D <= x["end"]]
+    soon = [x for x in cur if 0 < x["dday"] <= 3]
+    wk_cities = []
+    for x in cur:
+        if x["city"] not in wk_cities: wk_cities.append(x["city"])
+    facts = ["%s부터 %s까지 2주 구간에서 확인된 일정은 %d건입니다." % (EV.fmt(mon), EV.fmt(sun), len(cur))]
+    if today_run: facts.append("오늘 기준 진행 중인 행사는 %d건입니다." % len(today_run))
+    if wknd and len(wknd) < len(cur):
+        facts.append("이 가운데 주말에 시작하는 회차는 %d건, 평일 시작은 %d건입니다." % (len(wknd), len(cur)-len(wknd)))
+    if soon:      facts.append("3일 안에 시작하는 일정이 %d건 있어 신청을 서두르셔야 합니다." % len(soon))
+    if wk_cities: facts.append("지역은 %s 등 %d개 도시에 분포합니다." % ("·".join(wk_cities[:5]), len(wk_cities)))
+    facts.append("이 페이지는 매일 갱신되며, 지난 일정은 자동으로 내려갑니다.")
+    fact_html = "".join("<p>%s</p>" % esc(f) for f in facts)
+
+    # 요일별 표 — 월별 페이지에는 없는 구성
+    days = []
+    for i in range(14):
+        d = mon + datetime.timedelta(days=i)
+        if d < TODAY_D: continue
+        n = [x for x in cur if x["start"] <= d <= x["end"]]
+        if n: days.append((d, n))
+    day_rows = "".join(
+        "<tr><th>%s</th><td>%d건</td><td>%s</td></tr>" %
+        (EV.fmt_short(d), len(n), esc("·".join(sorted({x["city"] for x in n}))[:60]))
+        for d, n in days)
+    day_html = ("<table class='wtable'><thead><tr><th>날짜</th><th>일정</th><th>지역</th></tr></thead>"
+                "<tbody>%s</tbody></table>" % day_rows) if day_rows else ""
+
+    tips = ED.sample(ED.WEEK_TIP, "week%s" % mon.isoformat(), 4, "wt")
+    tips_html = "".join(f"<div class='tip'><h3>{esc(t)}</h3><p>{esc(d)}</p></div>" for t, d in tips)
     body=f"""{header()}{breadcrumb_html(bc)}<main>
      <section class="hero"><div class="wrap"><p class="eyebrow">{EV.fmt_short(mon)} ~ {EV.fmt_short(sun)}</p>
       <h1>이번주 웨딩박람회 일정</h1>
       <p class="lead">지금 신청 가능한 전국 웨딩박람회 {len(cur)}건입니다. 주말 방문 계획을 세워 보세요.</p></div></section>
+     <section class="wrap"><h2 class="sec">{esc(ED.pick(ED.WEEK_H2, mon.isoformat()))}</h2>
+      <div class="factbox">{fact_html}</div></section>
      <section class="wrap"><div class="cards">{cards_html(cur, show_city=True, empty="이번주 예정된 일정이 없습니다.")}</div></section>
+     <section class="wrap"><h2 class="sec">날짜별 진행 현황</h2>{day_html}</section>
+     <section class="wrap"><h2 class="sec">이번주 방문 요령</h2><div class="tips">{tips_html}</div></section>
+     <section class="wrap"><h2 class="sec">다른 기간 일정</h2>
+      <div class="chips near"><a href="/일정/">월별 일정 보기</a><a href="/행사장/">행사장별 보기</a></div></section>
     </main>{footer()}"""
     w(path+"index.html", head(title, desc,
       "이번주 웨딩박람회, 주말 웨딩박람회, 웨딩박람회 일정, 무료초대권", url,
@@ -552,10 +558,11 @@ def week_page(evs):
     URLS.append(url)
 
 MON_KO = {1:"1월",2:"2월",3:"3월",4:"4월",5:"5월",6:"6월",7:"7월",8:"8월",9:"9월",10:"10월",11:"11월",12:"12월"}
-def month_page(ym, evs, all_months):
+def month_page(ym, evs, all_months, always_evs=None):
     y, m = int(ym[:4]), int(ym[5:7])
     path="/일정/%s/" % ym; url=DOMAIN+path
     label = "%d년 %s" % (y, MON_KO[m])
+    evs = sorted(evs, key=lambda x: x["start"])
     title = "%s 웨딩박람회 일정 %d건 총정리 | 무료초대권 - %s" % (label, len(evs), SITE)
     desc = "%s에 열리는 전국 웨딩박람회 %d건의 날짜와 장소를 정리했습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요." % (label, len(evs))
     kw = "%s 웨딩박람회, %s 웨딩박람회 일정, %d년 웨딩박람회, 웨딩박람회 무료초대권" % (label, label, y)
@@ -563,15 +570,71 @@ def month_page(ym, evs, all_months):
     nav = "".join('<a class="%s" href="/일정/%s/">%s</a>' %
                   ("on" if x==ym else "", x, "%d년 %s"%(int(x[:4]), MON_KO[int(x[5:7])]))
                   for x in all_months)
+
+    # 월 고유 사실 — 주차 분포·지역 분포·성수기 구분
+    facts = [ED.pick(ED.MON_LEAD, ym, "ml").format(label=label)]
+    season = ("성수기" if m in (3,4,5,9,10,11) else
+              "혹서기" if m in (7,8) else "혹한기" if m in (12,1,2) else "비수기")
+    facts.append("%s은 %s에 해당합니다. %s" % (label, season, ED.MON_PEAK[season]))
+    wcnt = {}
+    for x in evs: wcnt[(x["start"].day - 1)//7 + 1] = wcnt.get((x["start"].day - 1)//7 + 1, 0) + 1
+    if wcnt:
+        top = max(wcnt, key=lambda k: wcnt[k])
+        facts.append("주차별로 보면 %d주차에 %d건으로 가장 많이 몰려 있습니다." % (top, wcnt[top]))
+    mcity = []
+    for x in evs:
+        if x["city"] not in mcity: mcity.append(x["city"])
+    if mcity:
+        facts.append("개최 지역은 %s 등 %d개 도시입니다." % ("·".join(mcity[:6]), len(mcity)))
+    wknd = sum(1 for x in evs if x["start"].weekday() >= 5)
+    if evs: facts.append("주말에 시작하는 회차는 %d건, 평일 시작은 %d건입니다." % (wknd, len(evs)-wknd))
+    fact_html = "".join("<p>%s</p>" % esc(f) for f in facts)
+
+    # 주차별 표 — 이번주 페이지의 날짜별 표와 구성이 다르다
+    wrows = "".join("<tr><th>%d주차</th><td>%d건</td></tr>" % (k, wcnt[k]) for k in sorted(wcnt))
+    week_html = ("<table class='wtable'><thead><tr><th>주차</th><th>일정 수</th></tr></thead>"
+                 "<tbody>%s</tbody></table>" % wrows) if wrows else ""
+    # 지역별 표
+    cc = {}
+    for x in evs: cc[x["city"]] = cc.get(x["city"], 0) + 1
+    crows = "".join("<tr><th>%s</th><td>%d건</td></tr>" % (esc(k), v)
+                    for k, v in sorted(cc.items(), key=lambda t: -t[1])[:12])
+    city_html = ("<table class='wtable'><thead><tr><th>지역</th><th>일정 수</th></tr></thead>"
+                 "<tbody>%s</tbody></table>" % crows) if crows else ""
+
+    tips = ED.sample(ED.MON_TIP, ym, 4, "mt")
+    tips_html = "".join(f"<div class='tip'><h3>{esc(t)}</h3><p>{esc(d)}</p></div>" for t, d in tips)
+
+    # 상시 진행 상담·초대전 — 날짜가 고정된 행사와 섞지 않고 따로 붙인다.
+    # (주차 분포·건수 같은 수치는 기간 한정 행사 기준을 그대로 유지한다)
+    always_evs = always_evs or []
+    always_html = ""
+    if always_evs:
+        _ac = []
+        for x in always_evs:
+            if x["city"] not in _ac: _ac.append(x["city"])
+        _lead = ("%s에도 날짜와 상관없이 예약해 방문할 수 있는 상담·초대전이 %d건 있습니다. "
+                 "%s 등 %d개 도시에서 진행되며, 특정 주말 일정이 맞지 않을 때 대안으로 보시면 됩니다."
+                 % (label, len(always_evs), "·".join(_ac[:6]), len(_ac)))
+        always_html = (
+            "<section class=\"wrap\"><h2 class=\"sec\">%s에도 상시 진행 중인 상담·초대전 (%d건)</h2>"
+            "<p class=\"sub\">%s</p><div class=\"cards\">%s</div></section>"
+            % (esc(label), len(always_evs), esc(_lead), cards_html(always_evs, show_city=True)))
     body=f"""{header()}{breadcrumb_html(bc)}<main>
      <section class="hero"><div class="wrap"><p class="eyebrow">월별 일정</p>
       <h1>{label} 웨딩박람회 일정</h1>
       <p class="lead">{label}에 전국에서 열리는 웨딩박람회 {len(evs)}건입니다.</p>
       <div class="monthnav">{nav}</div></div></section>
+     <section class="wrap"><h2 class="sec">{label} 일정 개요</h2><div class="factbox">{fact_html}</div></section>
      <section class="wrap"><div class="cards">{cards_html(evs, show_city=True)}</div></section>
+     {always_html}
+     <section class="wrap"><h2 class="sec">{label} 주차별 분포</h2>{week_html}</section>
+     <section class="wrap"><h2 class="sec">{label} 지역별 분포</h2>{city_html}</section>
+     <section class="wrap"><h2 class="sec">{label} 방문 계획 세우기</h2><div class="tips">{tips_html}</div></section>
     </main>{footer()}"""
     w(path+"index.html", head(title, desc, kw, url,
-      [ld_breadcrumb(bc), ld_itemlist(label+" 웨딩박람회", [e["name"] for e in evs])]) + body)
+      [ld_breadcrumb(bc), ld_itemlist(label+" 웨딩박람회",
+        [e["name"] for e in evs] + [e["name"] for e in always_evs])]) + body)
     URLS.append(url)
 
 def month_index(mmap):
@@ -583,7 +646,15 @@ def month_index(mmap):
      <section class="hero"><div class="wrap"><p class="eyebrow">달력</p>
       <h1>월별 웨딩박람회 일정</h1>
       <p class="lead">원하는 달을 선택하면 그 달에 열리는 전국 박람회를 모아 볼 수 있습니다.</p></div></section>
-     <section class="wrap"><div class="guidegrid">{items}</div></section></main>{footer()}"""
+     <section class="wrap"><div class="guidegrid">{items}</div></section>
+     <section class="wrap"><h2 class="sec">월별로 계획을 세울 때</h2><div class="factbox">
+      <p>예식 예정일이 정해져 있다면 그 시점에서 6~9개월 전이 박람회를 둘러보기 좋은 시기입니다. 예식장을 먼저 확정해야 스드메 일정을 역산할 수 있기 때문입니다.</p>
+      <p>봄과 가을은 예식이 몰리는 성수기라 원하는 날짜를 잡기 어려운 편이고, 여름과 겨울은 선택지가 넓은 대신 이동 여건을 함께 고려하셔야 합니다.</p>
+      <p>현재 {len(mmap)}개 달에 걸쳐 총 {sum(len(v) for v in mmap.values())}건의 일정이 확인됩니다. 각 달 페이지에서 주차별·지역별 분포를 확인하실 수 있습니다.</p>
+      <p>한 달에 두 곳 이상 방문하시는 경우 간격을 1~2주 두시면 앞서 받은 견적을 정리할 시간이 생깁니다.</p></div></section>
+     <section class="wrap"><h2 class="sec">다른 방식으로 찾기</h2><div class="chips near">
+      <a href="/이번주-웨딩박람회/">이번주 일정</a><a href="/행사장/">행사장별 일정</a><a href="/가이드/">결혼준비 가이드</a></div></section>
+     </main>{footer()}"""
     w(path+"index.html", head("월별 웨딩박람회 일정 달력 | "+SITE,
       "월별로 전국 웨딩박람회 일정을 모아 확인할 수 있습니다. 원하는 달을 선택하세요.",
       "웨딩박람회 달력, 월별 웨딩박람회, 웨딩박람회 일정표", url, [ld_breadcrumb(bc)]) + body)
@@ -616,9 +687,7 @@ def home(EVS=None):
     ]
     lds = [ld_website(), ld_faq(faq),
            ld_breadcrumb([("홈", DOMAIN+"/")])]
-    faq_html = "".join(
-      f"<details><summary><span class='qmark'>Q</span><span class='qtxt'>{q}</span></summary>"
-      f"<div class='a'><span class='amark'>A</span><span>{a}</span></div></details>" for q,a in faq)
+    faq_html = "".join(f"<details><summary>{q}</summary><div class='a'>{a}</div></details>" for q,a in faq)
     body = f"""{header()}
 <main>
  <section class="hero home">
@@ -645,21 +714,18 @@ def home(EVS=None):
  </section>
 
  <section class="wrap">
-  <p class="seclabel">THIS WEEK</p>
   <h2 class="sec">이번주 열리는 웨딩박람회</h2>
   <p class="sub">지금 신청 가능한 일정입니다. <a href="/이번주-웨딩박람회/">전체 보기</a></p>
   <div class="cards">{week_cards}</div>
  </section>
 
  <section class="wrap">
-  <p class="seclabel">REGIONS</p>
   <h2 class="sec">지역별 웨딩박람회 일정</h2>
   <p class="sub">원하는 지역을 선택하세요.</p>
   <div class="regiongrid">{blocks}</div>
  </section>
 
  <section class="wrap">
-  <p class="seclabel">GUIDE</p>
   <h2 class="sec">결혼준비 가이드</h2>
   <div class="guidegrid">
    <a class="gcard" href="/가이드/웨딩박람회-활용법/"><b>웨딩박람회 200% 활용법</b>
@@ -672,7 +738,6 @@ def home(EVS=None):
  </section>
 
  <section class="wrap">
-  <p class="seclabel">FAQ</p>
   <h2 class="sec">자주 묻는 질문</h2>
   <div class="faq">{faq_html}</div>
  </section>
@@ -691,6 +756,10 @@ ART_BODY = {
  ("현장에서 꼭 물어볼 질문","보증 인원을 조정할 수 있는지, 식대에 부가세가 포함인지, 대관료와 꽃 장식이 기본에 들어 있는지, 주차는 몇 대까지 지원되는지를 반드시 확인하세요."),
  ("사은품보다 중요한 것","눈에 띄는 사은품보다 계약 조건이 훨씬 중요합니다. 같은 금액이라도 촬영 원본 제공 여부나 드레스 벌수에 따라 실제 가치가 크게 달라집니다."),
  ("당일 계약을 미뤄도 되는 이유","대부분의 혜택은 다음 회차에도 비슷하게 제공됩니다. 여러 곳을 비교한 뒤 결정해도 늦지 않으며, 다만 인기 날짜는 조기 마감될 수 있으니 일정만 먼저 확인해 두세요."),
+ ("혼자 갈지, 함께 갈지","혼자 오셔도 상담은 가능합니다. 다만 예산과 홀 선택은 두 분이 함께 결정할 항목이라 같이 오시는 경우가 많습니다. 혼주가 결정에 관여하신다면 혼주 의견이 필요한 항목을 미리 표시해 두시면 상담이 두 번 반복되지 않습니다."),
+ ("몇 곳을 다녀야 적당한가","두세 곳이 적당합니다. 한 곳만 보면 제시된 금액이 높은지 낮은지 판단할 기준이 없고, 네 곳을 넘기면 조건이 뒤섞여 오히려 정리가 어려워집니다. 방문 간격은 1~2주가 무난합니다."),
+ ("무료 초대권은 어떤 개념인가","사전 신청자에게 안내되는 입장 방식입니다. 현장 접수가 가능한 회차도 있지만 대기가 생길 수 있어 날짜가 정해지셨다면 미리 신청해 두시는 편이 확실합니다. 신청 후 주최 측에서 방문 일정을 확인하는 연락이 오는 것이 일반적입니다."),
+ ("다녀온 뒤에 할 일","돌아오는 길에 바로 정리하시는 것이 좋습니다. 업체명, 담당자, 총액, 포함 항목 네 가지만 적어 두어도 다음 상담에서 질문이 훨씬 구체적으로 나옵니다. 하루만 지나도 부스별 조건이 섞이기 시작합니다."),
 ],
 "스드메-견적-비교": [
  ("스드메 견적이 업체마다 다른 이유","스드메는 스튜디오·드레스·메이크업을 묶은 패키지라 구성 방식에 따라 총액이 달라집니다. 같은 가격이라도 촬영 컷수와 드레스 벌수가 다르면 실제 가치는 크게 차이 납니다."),
@@ -698,6 +767,10 @@ ART_BODY = {
  ("추가금이 붙는 지점","주말 촬영 할증, 수입 드레스 업그레이드, 원본 데이터 구매, 헬퍼 교통비가 대표적입니다. 견적서에 포함으로 적혀 있는지 항목별로 확인하세요."),
  ("비교표를 만들어 보세요","업체명, 총액, 촬영 컷수, 드레스 벌수, 추가금 항목을 표로 정리하면 어느 곳이 실제로 합리적인지 한눈에 보입니다. 상담마다 견적서를 사진으로 남겨 두면 편합니다."),
  ("계약서에 남겨야 할 것","구두로 약속받은 업그레이드나 서비스는 반드시 특약란에 문구로 기재해야 합니다. 취소 시 환불 규정과 일정 변경 가능 횟수도 함께 확인하세요."),
+ ("패키지 안의 업체가 지정인지 확인하세요","같은 금액의 패키지라도 스튜디오와 드레스숍을 고를 수 있는 경우와 지정된 경우가 있습니다. 선택 가능 범위가 총액만큼이나 만족도를 좌우하므로 상담에서 먼저 확인하시는 편이 좋습니다."),
+ ("현장 결제 항목을 따로 적으세요","헬퍼비, 추가 보정비, 드레스 피팅 추가 비용처럼 계약 금액과 별개로 당일 현장에서 결제하는 항목이 있습니다. 이 부분이 빠진 견적끼리 비교하면 실제 지출이 어긋납니다."),
+ ("항목명을 통일해 적어 두세요","업체마다 부르는 이름이 달라 같은 항목이 다르게 보입니다. 촬영 시간·의상 벌수·제공 원본 수·메이크업 횟수 네 가지 기준으로 통일해 적으면 어느 쪽이 실제로 넉넉한 구성인지 바로 드러납니다."),
+ ("견적 유효기간을 물어보세요","현장에서 안내된 조건이 그날에만 유효한지, 일정 기간 유지되는지 확인해 두시면 비교할 시간을 벌 수 있습니다. 담당자에게 직접 물어보시면 대부분 알려 줍니다."),
 ],
 "결혼준비-체크리스트": [
  ("12개월 전 · 큰 틀 정하기","예산 상한선과 희망 예식 시기를 정하고 양가 상견례 일정을 잡습니다. 이 시기에 웨딩박람회를 방문하면 전체 시세를 파악하기 좋습니다."),
@@ -705,6 +778,10 @@ ART_BODY = {
  ("6개월 전 · 스드메 계약","촬영 콘셉트를 정하고 스튜디오·드레스·메이크업을 계약합니다. 원본 제공과 추가금 조건을 반드시 확인해야 합니다."),
  ("3개월 전 · 예물과 혼수","예물과 예단, 가전·가구를 준비합니다. 배송과 설치 일정이 입주일과 맞는지 확인이 필요합니다."),
  ("1개월 전 · 최종 점검","청첩장 발송, 신혼여행 준비물, 예식 당일 동선과 진행 순서를 확정합니다. 잔금 일정과 환불 규정도 다시 확인해 두세요."),
+ ("순서를 바꿔도 되는 경우","예식 날짜가 이미 정해져 있거나 홀이 확정된 경우에는 스드메부터 진행하셔도 무리가 없습니다. 순서 자체보다 앞 단계가 확정되지 않은 채 뒤 단계를 계약하지 않는 것이 중요합니다."),
+ ("예산을 나누는 기준","총액 상한을 먼저 정하고 예식장·스드메·예물 혼수 세 덩어리로 나눠 두시면 상담 중에 한쪽으로 몰리는 일을 줄일 수 있습니다. 항목별 상한이 없으면 앞에서 쓴 만큼 뒤가 빠듯해집니다."),
+ ("두 분의 역할을 나눠 두세요","연락 담당과 기록 담당을 나누면 상담이 훨씬 빨라집니다. 한 분이 질문하는 동안 다른 분이 조건을 적어 두면 놓치는 항목이 줄어듭니다."),
+ ("일정이 밀렸을 때","준비 기간이 짧아도 순서만 지키면 진행할 수 있습니다. 예식장을 먼저 확정하고 남은 기간을 역산해 스드메 일정을 잡으시면 됩니다. 촬영 일정이 가장 먼저 마감되는 편이라 이 부분을 우선 확인하세요."),
 ],
 }
 
@@ -722,6 +799,14 @@ def article_page(slug, title_ko, kw):
         "author":{"@type":"Organization","name":"에이치에스컴퍼니"},
         "publisher":{"@type":"Organization","name":SITE}}, ensure_ascii=False)]
     inner = "".join(f"<h2 class='sec'>{h}</h2><p class='para'>{p}</p>" for h,p in secs)
+    def _fmt(s):
+        return s.replace("{loc}", "우리 지역").replace("{v}", "행사장")
+    afaq = [(ED.fix_josa(_fmt(q)), ED.fix_josa(_fmt(a))) for q, a in ED.sample(ED.LOC_FAQ, slug, 6, "art")]
+    lds.append(ld_faq(afaq))
+    afaq_html = "".join("<details><summary>%s</summary><div class='a'>%s</div></details>"
+                        % (esc(q), esc(a)) for q, a in afaq)
+    others = "".join('<a href="/가이드/%s/">%s</a>' % (quote(s), esc(t))
+                     for s, t, _ in ARTICLES if s != slug)
     body = f"""{header()}
 {breadcrumb_html(bc)}
 <main>
@@ -731,6 +816,8 @@ def article_page(slug, title_ko, kw):
    <div class="cta-box"><b>우리 지역 웨딩박람회 일정이 궁금하다면</b>
      <a class="btn" href="/">지역별 일정 보기</a></div>
  </section>
+ <section class="wrap"><h2 class="sec">자주 묻는 질문</h2><div class="faq">{afaq_html}</div></section>
+ <section class="wrap"><h2 class="sec">다른 가이드</h2><div class="chips near">{others}</div></section>
 </main>
 {footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
@@ -745,7 +832,15 @@ def guide_index():
 {breadcrumb_html(bc)}
 <main><section class="hero"><div class="wrap"><p class="eyebrow">가이드</p>
  <h1>결혼준비 가이드</h1><p class="lead">웨딩박람회 활용법부터 스드메 견적 비교, 준비 순서까지 정리했습니다.</p></div></section>
-<section class="wrap"><div class="guidegrid">{items}</div></section></main>{footer()}"""
+<section class="wrap"><div class="guidegrid">{items}</div></section>
+<section class="wrap"><h2 class="sec">가이드를 읽는 순서</h2><div class="factbox">
+ <p>처음 준비를 시작하셨다면 결혼준비 체크리스트를 먼저 보시면 전체 흐름이 잡힙니다. 시기별로 무엇을 정해야 하는지 순서가 정리되어 있습니다.</p>
+ <p>박람회 방문 날짜가 정해지셨다면 웨딩박람회 활용법을 보시면 됩니다. 현장에서 무엇을 물어보고 무엇을 적어 와야 하는지 정리했습니다.</p>
+ <p>견적을 이미 받으신 상태라면 스드메 견적 비교를 참고하세요. 업체마다 다르게 부르는 항목을 같은 기준으로 놓고 보는 방법을 다룹니다.</p>
+ <p>세 편 모두 특정 업체를 권하지 않습니다. 조건을 확인하는 방법만 정리했습니다.</p></div></section>
+<section class="wrap"><h2 class="sec">일정 찾아보기</h2><div class="chips near">
+ <a href="/이번주-웨딩박람회/">이번주 일정</a><a href="/일정/">월별 일정</a><a href="/행사장/">행사장별 일정</a></div></section>
+</main>{footer()}"""
     w(path+"index.html", head("결혼준비 가이드 | "+SITE,
         "웨딩박람회 활용법과 스드메 견적 비교, 결혼준비 체크리스트를 정리한 가이드 모음입니다.",
         "결혼준비 가이드, 웨딩박람회 활용법, 스드메 견적, 결혼준비 체크리스트", url,
@@ -773,7 +868,26 @@ def apply_page():
     <label for="ag">개인정보 수집·이용(신청 접수 및 방문 안내 목적)에 동의합니다.
       <a href="/개인정보처리방침/">개인정보처리방침</a></label></div>
   <button type="submit">무료 초대권 신청하기</button>
- </form></section></main>{footer()}"""
+ </form></section>
+<section class="wrap"><h2 class="sec">신청은 이렇게 진행됩니다</h2><div class="factbox">
+ <p>희망 지역과 일정을 남겨 주시면, 조건에 맞는 박람회가 열릴 때 상담 파트너를 통해 방문 안내를 드립니다. 신청 자체에는 비용이 들지 않습니다.</p>
+ <p>연락처는 방문 일정을 확인하기 위한 용도로만 사용되며, 안내를 원하지 않으시면 그 자리에서 말씀해 주시면 됩니다.</p>
+ <p>예식 날짜가 아직 정해지지 않으셨어도 신청하실 수 있습니다. 시세를 먼저 파악할 목적으로 방문하시는 분도 많습니다.</p>
+ <p>희망 지역에 당장 일정이 없더라도 신청 내용은 보관되며, 새 일정이 확정되면 안내드립니다.</p></div></section>
+<section class="wrap"><h2 class="sec">신청 전에 정해두면 좋은 것</h2><div class="tips">
+ <div class="tip"><h3>예상 하객 수</h3><p>이 숫자 하나로 후보 홀이 크게 좁혀집니다. 대략적인 범위만 있어도 충분합니다.</p></div>
+ <div class="tip"><h3>희망 예식 시기</h3><p>월과 요일을 두세 개 후보로 준비하시면 상담이 빨라집니다.</p></div>
+ <div class="tip"><h3>예산 상한</h3><p>총액 기준을 먼저 정하시면 맞지 않는 제안을 걸러낼 수 있습니다.</p></div>
+ <div class="tip"><h3>이동 가능 범위</h3><p>인근 지역까지 열어두시면 날짜 선택지가 넓어집니다.</p></div></section>
+<section class="wrap"><h2 class="sec">신청 전 자주 묻는 질문</h2><div class="faq">
+ <details><summary>신청하면 비용이 발생하나요?</summary><div class='a'>신청과 초대권 안내에는 비용이 들지 않습니다. 이후 계약 여부는 상담 후 직접 결정하시면 됩니다.</div></details>
+ <details><summary>연락은 언제 오나요?</summary><div class='a'>희망 지역에 진행 예정 일정이 있는 경우 순차적으로 안내드립니다. 원하시는 연락 시간대를 문의란에 적어 주시면 참고합니다.</div></details>
+ <details><summary>여러 지역을 함께 신청할 수 있나요?</summary><div class='a'>문의란에 함께 적어 주시면 됩니다. 이동 가능한 범위를 알려 주시면 선택지를 넓혀 안내드립니다.</div></details>
+ <details><summary>초대권 없이 현장 방문이 되나요?</summary><div class='a'>회차에 따라 다릅니다. 사전 신청자에게 우선 안내되는 경우가 많아 미리 신청해 두시는 편이 확실합니다.</div></details>
+ <details><summary>신청 내용을 수정하고 싶습니다</summary><div class='a'>다시 신청해 주시면 최신 내용으로 안내드립니다.</div></details></div></section>
+<section class="wrap"><h2 class="sec">일정 먼저 확인하기</h2><div class="chips near">
+ <a href="/이번주-웨딩박람회/">이번주 일정</a><a href="/일정/">월별 일정</a><a href="/행사장/">행사장별 일정</a><a href="/가이드/">결혼준비 가이드</a></div></section>
+</main>{footer()}"""
     w(path+"index.html", head("웨딩박람회 무료 초대권 신청 | "+SITE,
       "웨딩박람회 무료 초대권을 신청하세요. 희망 지역과 일정을 남기면 담당자가 방문 안내를 드립니다.",
       "웨딩박람회 초대권, 무료초대권 신청, 결혼박람회 사전예약", url, [ld_breadcrumb(bc)]) + body)
@@ -822,22 +936,60 @@ if __name__ == "__main__":
     EVS = EV.load(refresh=True)
     print("  replyalba(시트): %d건" % len(EVS))
 
-    # cpaad 보완 — 시트에 없는 행사만 추가 (넷리파이 빌드 서버에서 수집)
+    # cpaad 보완 — 넷리파이(해외 IP)에서는 cpaad 접속이 타임아웃이라 기본 비활성.
+    # 매 빌드마다 25초 x 3회를 헛되이 쓰게 되므로 끕니다.
+    # 수집은 사장님 PC의 cpaad자동.py 가 시트에 직접 넣습니다.
+    # 되살리려면 넷리파이 환경변수 CPAAD_ENABLE=1 을 넣으세요.
+    if os.environ.get("CPAAD_ENABLE") != "1":
+        print("  cpaad 빌드측 수집: 비활성 (PC 수집기가 시트에 직접 기록)")
+        CP.DIAG.append("빌드측 cpaad 수집 비활성 — CPAAD_ENABLE=1 로 켤 수 있습니다")
+        _skip_cpaad = True
+    else:
+        _skip_cpaad = False
+
     try:
-        import datetime as _dt
+        if _skip_cpaad:
+            raise StopIteration
+        _today = datetime.date.today()
+        _added = 0
         for r in CP.merge_new(EVS):
-            sd = _dt.date.fromisoformat(r["start"]); ed = _dt.date.fromisoformat(r["end"])
-            if ed < _dt.date.today(): continue
-            EVS.append({"city":r["city"], "name":r["name"], "start":sd, "end":ed,
-                        "place":r["place"], "img":r["img"], "link":r["link"],
-                        "benefit":r["benefit"],
-                        "slug": EV.slugify(r["name"]) + "-" + r["start"].replace("-",""),
-                        "dday": (sd - _dt.date.today()).days, "month": r["start"][:7]})
+            try:
+                sd = datetime.date.fromisoformat(r["start"])
+                ed = datetime.date.fromisoformat(r["end"]) if r["end"] else sd
+            except ValueError:
+                continue
+            if ed < _today: continue
+            EVS.append({"city": r["city"], "name": r["name"], "start": sd, "end": ed,
+                        "place": r["place"], "img": r["img"], "link": r["link"],
+                        "benefit": r.get("benefit", ""),
+                        "slug": EV.slugify(r["name"]) + "-" + r["start"].replace("-", ""),
+                        "dday": (sd - _today).days, "month": r["start"][:7]})
+            _added += 1
+        print("  cpaad 병합: %d건 추가" % _added)
+        CP.DIAG.append("cpaad 병합 결과: %d건 추가" % _added)
+    except StopIteration:
+        pass
     except Exception as _e:
         print("  cpaad 병합 생략:", type(_e).__name__, _e)
+        try: CP.DIAG.append("cpaad 병합 예외: %s: %s" % (type(_e).__name__, _e))
+        except Exception: pass
 
-    EVS.sort(key=lambda x: (x["start"], x["city"]))
-    print("  진행/예정 행사 총계: %d건" % len(EVS))
+    # 진단 결과를 사이트에 파일로 남긴다 (robots 로 수집 차단)
+    try:
+        _sheetwarn = getattr(EV, "WARN", []) or []
+        _diag = "\n".join((["[시트 경고] " + x for x in _sheetwarn] or [])
+                          + (getattr(CP, "DIAG", []) or ["(진단 기록 없음)"]))
+        for _x in _sheetwarn: print("  [시트 경고]", _x)
+        w("_cpaad-status.txt",
+          "weddingnote cpaad 수집 진단\n빌드 시각(UTC): %s\n대상 URL: %s\n%s\n%s\n"
+          % (datetime.datetime.utcnow().isoformat(timespec="seconds"),
+             CP.CPAAD_URL, "-" * 50, _diag))
+    except Exception as _e2:
+        print("  진단 파일 기록 실패:", _e2)
+
+    EVS.sort(key=lambda x: (bool(x.get("always")), x["start"], x["city"]))
+    TOTAL_EV = len(EVS)
+    print("  진행/예정 행사: %d건" % len(EVS))
 
     by_city = {}
     for e in EVS: by_city.setdefault(e["city"], []).append(e)
@@ -852,26 +1004,30 @@ if __name__ == "__main__":
 
     home(EVS)
     for loc, region, path in ALL_LOCS:
-        loc_page(loc, region, path, evs_for(loc), len(EVS))
+        loc_page(loc, region, path, evs_for(loc))
 
     # 개별 행사 페이지
-    for e in EVS: event_page(e, by_city.get(e["city"], []), EVS)
+    for e in EVS: event_page(e, by_city.get(e["city"], []))
     # 행사장 페이지
     vmap = {}
     for e in EVS:
         v = EV.venue_of(e)
         if v: vmap.setdefault(v, []).append(e)
     vmap = {k:v for k,v in vmap.items() if len(v) >= 2}
+    VENUE_ALL[:] = sorted(vmap.keys())
     venue_index(vmap)
-    _vn = sorted(vmap.keys())
-    for v, es in vmap.items(): venue_page(v, es, _vn)
+    for v, es in vmap.items(): venue_page(v, es)
     # 이번주 / 월별
     week_page(EVS)
     mmap = {}
-    for e in EVS: mmap.setdefault(e["month"], []).append(e)
+    for e in EVS:
+        if e.get("month"): mmap.setdefault(e["month"], []).append(e)
     months = sorted(mmap.keys())
     month_index(mmap)
-    for ym in months: month_page(ym, mmap[ym], months)
+    ALWAYS_EVS = [e for e in EVS if e.get("always")]
+    _cur = TODAY_D.strftime("%Y-%m")
+    for ym in months:
+        month_page(ym, mmap[ym], months, ALWAYS_EVS if ym >= _cur else [])
 
     guide_index()
     for s,t,k in ARTICLES: article_page(s,t,k)
@@ -886,7 +1042,7 @@ if __name__ == "__main__":
                   % (enc_url(u), TODAY, pr))
     sm.append('</urlset>')
     w("sitemap.xml", "\n".join(sm))
-    w("robots.txt", "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n" % DOMAIN)
+    w("robots.txt", "User-agent: *\nAllow: /\nDisallow: /_cpaad-status.txt\n\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
     pd = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
