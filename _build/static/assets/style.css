@@ -78,6 +78,29 @@ h2.sec{font-size:21px;font-weight:800;letter-spacing:-.4px;margin-bottom:6px;
 .card .detail{display:block;text-align:center;margin-top:9px;padding:9px;font-size:13px;font-weight:600;
   color:#5f6672;border:1px solid #e6e8ec;border-radius:7px;transition:.16s}
 .card .detail:hover{color:#12233d;border-color:#12233d;background:#f6f7f9}
+
+/* ── 지역 요약 박스 (행사장·인근지역·건수) ── */
+.factbox{background:var(--soft);border:1px solid var(--line);border-left:3px solid var(--gold);
+  border-radius:var(--radius);padding:18px 22px;margin:26px 0}
+.factbox p{margin:0;font-size:15px;line-height:1.9;color:#3a4150}
+.factbox p+p{margin-top:2px}
+.factbox p:before{content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+  background:var(--gold);vertical-align:middle;margin-right:9px;margin-bottom:3px}
+
+/* ── 지역 테마 문단 ── */
+.theme{background:#fffdf7;border:1px solid #f0e6d2;border-radius:var(--radius);
+  padding:20px 22px;margin:26px 0}
+.theme h2{font-size:17px;font-weight:800;color:var(--navy);margin-bottom:10px;
+  letter-spacing:-.3px;border:0;padding:0}
+.theme p{margin:7px 0;font-size:14.8px;line-height:1.85;color:#4a5261}
+
+@media(max-width:640px){
+  .factbox{padding:15px 17px;margin:20px 0}
+  .factbox p{font-size:14.3px;line-height:1.8}
+  .theme{padding:16px 18px;margin:20px 0}
+  .theme h2{font-size:16px}
+  .theme p{font-size:14.2px}
+}
 .card .poster{cursor:pointer}
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
 table{width:100%;border-collapse:collapse;font-size:14.5px;min-width:560px}

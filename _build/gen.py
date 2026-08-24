@@ -12,6 +12,7 @@ import cpaad as CP
 OUT = os.path.join(os.path.dirname(__file__), "..", "site")
 TODAY_D = datetime.date.today()
 TODAY = TODAY_D.isoformat()
+TOTAL_EV = 0      # 전국 등록 일정 수 (히어로 통계용)
 URLS = []
 
 def w(path, content):
@@ -159,7 +160,12 @@ def loc_page(loc, region, path, my_evs=None):
    <h1>{loc} 웨딩박람회 일정</h1>
    <p class="lead">{intro} {loc}에서 열리는 웨딩박람회·결혼박람회·허니문박람회 일정과
     무료 초대권 정보를 매일 갱신해 정리합니다.</p>
-   <div class="badges"><span>매일 일정 갱신</span><span>무료 초대권</span><span>사전예약 안내</span></div>
+   <div class="stats">
+     <div><b>{ev_count}</b><span>{loc} 진행 예정</span></div>
+     <div><b>{TOTAL_EV}</b><span>전국 등록 일정</span></div>
+     <div><b>100%</b><span>무료 초대권</span></div>
+     <div><b>{TODAY_D.month}.{TODAY_D.day}</b><span>최근 갱신</span></div>
+   </div>
   </div>
  </section>
 
@@ -189,8 +195,7 @@ def loc_page(loc, region, path, my_evs=None):
  </section>
 
  <section class="wrap">
-  <h2 class="sec">{theme_h2}</h2>
-  <div class="factbox">{theme_html}</div>
+  <div class="theme"><h2>{theme_h2}</h2>{theme_html}</div>
  </section>
 
  <section class="wrap">
@@ -962,6 +967,7 @@ if __name__ == "__main__":
         print("  진단 파일 기록 실패:", _e2)
 
     EVS.sort(key=lambda x: (x["start"], x["city"]))
+    TOTAL_EV = len(EVS)
     print("  진행/예정 행사: %d건" % len(EVS))
 
     by_city = {}
