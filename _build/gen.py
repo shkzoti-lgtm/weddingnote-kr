@@ -7,6 +7,7 @@ from data import *
 from seo import *
 import events as EV
 import evdata as ED
+import cpaad as CP
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "site")
 TODAY_D = datetime.date.today()
@@ -223,11 +224,12 @@ def event_card(e, show_city=False):
            'aria-label="%s 무료 초대권 신청"><img src="%s" alt="%s 포스터" loading="lazy"></a>'
            % (esc(e["link"]), esc(e["name"]), esc(e["img"]), esc(e["name"]))) if e["img"] else ""
     city = ("<span class='ctag'>%s</span>" % esc(e["city"])) if show_city else ""
+    ben = ('<div class="benefit">혜택 %s</div>' % esc(e["benefit"])) if e.get("benefit") else ""
     return f"""<article class="card">{img}<div class="body">
  <div class="tags"><span class="status">모집중</span>{city}{dday}</div>
  <h3><a href="/행사/{quote(e['slug'])}/">{esc(e['name'])}</a></h3>
  <div class="meta">일정 {dates}</div>
- <div class="meta">장소 {esc(e['place'])}</div>
+ <div class="meta">장소 {esc(e['place'])}</div>{ben}
  <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
  <a class="detail" href="/행사/{quote(e['slug'])}/">박람회 정보 자세히 보기</a>
 </div></article>"""
@@ -869,6 +871,30 @@ if __name__ == "__main__":
         print("  정적 파일 복사 완료")
     print("행사 데이터 로드…")
     EVS = EV.load(refresh=True)
+    print("  replyalba(시트): %d건" % len(EVS))
+
+    # cpaad 보완 — 시트에 없는 행사만 추가 (넷리파이 빌드 서버에서 수집)
+    try:
+        _today = datetime.date.today()
+        _added = 0
+        for r in CP.merge_new(EVS):
+            try:
+                sd = datetime.date.fromisoformat(r["start"])
+                ed = datetime.date.fromisoformat(r["end"]) if r["end"] else sd
+            except ValueError:
+                continue
+            if ed < _today: continue
+            EVS.append({"city": r["city"], "name": r["name"], "start": sd, "end": ed,
+                        "place": r["place"], "img": r["img"], "link": r["link"],
+                        "benefit": r.get("benefit", ""),
+                        "slug": EV.slugify(r["name"]) + "-" + r["start"].replace("-", ""),
+                        "dday": (sd - _today).days, "month": r["start"][:7]})
+            _added += 1
+        print("  cpaad 병합: %d건 추가" % _added)
+    except Exception as _e:
+        print("  cpaad 병합 생략:", type(_e).__name__, _e)
+
+    EVS.sort(key=lambda x: (x["start"], x["city"]))
     print("  진행/예정 행사: %d건" % len(EVS))
 
     by_city = {}

@@ -17,6 +17,17 @@ GROUP = {
  '경상':['대구','거제','김해','울산','진주','창원','포항'],
 }
 
+CPAAD_ORIGIN = "https://ad.cpaad.co.kr"
+
+def _absolutize(u):
+    """cpaad 페이지의 상대경로를 절대 URL로 만든다."""
+    u = (u or "").strip().strip('"\'')
+    if not u: return ""
+    if u.lower().startswith(("http://", "https://")): return u
+    if u.startswith("//"): return "https:" + u
+    if u.startswith("/"):  return CPAAD_ORIGIN + u
+    return CPAAD_ORIGIN + "/" + u
+
 def _cat(name):
     n = re.sub(r'\s+','',name)
     if re.search(r'허니문|신혼여행', n): return 'honeymoon'
@@ -41,19 +52,51 @@ def _bigcat(t):
         if t.startswith(k): return k
     return None
 
+_DATE_RE = re.compile(
+    r'(?P<y>20\d{2})\s*[.\-/년]\s*(?P<ym>\d{1,2})\s*[.\-/월]\s*(?P<yd>\d{1,2})'      # 2026.09.22 / 2026년 9월 22일
+    r'|(?P<km>\d{1,2})\s*월\s*(?P<kd>\d{1,2})\s*일'                                    # 9월 22일
+    r'|(?<!\d)(?P<m>0?[1-9]|1[0-2])\s*[.\-/]\s*(?P<d>0?[1-9]|[12]\d|3[01])(?!\d)'      # 09.22 / 9/22
+)
+
 def _dates(txt):
-    md = re.findall(r'(\d{1,2})월\s*(\d{1,2})일', txt or '')
-    if not md: return None
+    """날짜 표기를 한 번에 훑어 처음·마지막 날짜를 뽑는다.
+       기존엔 'M월 D일' 한 형식만 받아, 표기가 다르면 그 행사가 통째로 버려졌다."""
+    t = txt or ''
+    if not t: return None
+    # 금액·수량 표기 오탐 방지 (3.5만원 → 3월 5일)
+    t = re.sub(r'[\d.,]+\s*(?:만원|천원|원|[%％]|억)', ' ', t)
     today = datetime.date.today()
-    def iso(mm, dd):
-        mm, dd = int(mm), int(dd)
+
+    def infer_year(mm, dd):
         y = today.year
         try: cand = datetime.date(y, mm, dd)
         except ValueError: return None
         if (today - cand).days > 90: y += 1
         return "%d-%02d-%02d" % (y, mm, dd)
-    s = iso(*md[0]); e = iso(*md[-1])
-    return (s, e) if s and e else None
+
+    vals = []
+    for m in _DATE_RE.finditer(t):
+        g = m.groupdict()
+        if g['y']:
+            try:
+                datetime.date(int(g['y']), int(g['ym']), int(g['yd']))
+                vals.append("%04d-%02d-%02d" % (int(g['y']), int(g['ym']), int(g['yd'])))
+            except ValueError: pass
+        elif g['km']:
+            v = infer_year(int(g['km']), int(g['kd']))
+            if v: vals.append(v)
+        elif g['m']:
+            v = infer_year(int(g['m']), int(g['d']))
+            if v: vals.append(v)
+    if not vals: return None
+    s0, e0 = vals[0], vals[-1]
+    # 종료일이 시작일보다 앞서면 연도 추정 오차 → 종료일을 다음 해로
+    if e0 < s0:
+        try:
+            ed = datetime.date.fromisoformat(e0)
+            e0 = ed.replace(year=ed.year + 1).isoformat()
+        except ValueError: e0 = s0
+    return (s0, e0)
 
 def fetch_html():
     for url in (CPAAD_URL,
@@ -74,35 +117,54 @@ def parse(html):
     marks = [(m.start(), _bigcat(m.group(1))) for m in
              re.finditer(r'(서울|경기도|인천|부산|충청도|전라도|강원도|경상도|제주도)\s*웨딩박람회\s*일정', html)]
     out = []
+    drop = {"권역미확인": 0, "제목없음": 0, "날짜파싱실패": 0, "도시미매칭": 0}
+    seen_blocks = 0
+    _unmatched = []
     for a in re.finditer(r"""<a[^>]+href=["']([^"']*/%s)["'][^>]*>(.*?)</a>""" % CPAAD_ID, html, re.S):
         href, block = a.group(1), a.group(2)
         if 'ad_title' not in block: continue
+        seen_blocks += 1
         cat = None
         for idx, c in marks:
             if idx < a.start(): cat = c
             else: break
-        if not cat: continue
+        if not cat:
+            drop["권역미확인"] += 1; continue
         def pick(cls):
             mm = re.search(r"""<div class=["']?%s["']?>(.*?)</div>""" % cls, block, re.S)
             if not mm: return ''
             t = re.sub(r'<br\s*/?>', ' ', mm.group(1))
             return re.sub(r'\s+',' ', re.sub(r'<[^>]*>','',t)).strip()
         name = _fix_trunc(pick('ad_title'))
-        if not name: continue
+        if not name:
+            drop["제목없음"] += 1; continue
         info, date, loc = pick('ad_info'), pick('ad_date'), pick('ad_location')
         d = _dates(date)
-        if not d: continue
+        if not d:
+            drop["날짜파싱실패"] += 1; continue
         city = None
         if cat in SINGLE: city = cat
         else:
             for c in GROUP.get(cat, []):
                 if c in loc: city = c; break
-        if not city: continue
+        if not city:
+            drop["도시미매칭"] += 1
+            if len(_unmatched) < 12: _unmatched.append("%s / %s" % (cat, loc[:30]))
+            continue
         im = re.search(r'<img[^>]+src=["\']?([^\s"\'>]+)', block)
-        img = im.group(1) if im else ''
-        link = ('https:' + href) if href.startswith('//') else href
+        img = _absolutize(im.group(1)) if im else ''
+        link = _absolutize(href)
         out.append({"city":city, "name":name, "start":d[0], "end":d[1],
                     "place":loc, "img":img, "link":link, "benefit":info})
+    if seen_blocks:
+        _lost = sum(drop.values())
+        print("  cpaad 파싱: 블록 %d개 중 %d건 인식, %d건 누락 %s"
+              % (seen_blocks, len(out), _lost,
+                 {k: v for k, v in drop.items() if v} if _lost else ""))
+        if _unmatched:
+            print("    도시 미매칭 예시:", " | ".join(_unmatched))
+    else:
+        print("  cpaad 파싱: 행사 블록을 하나도 못 찾음 — 페이지 구조가 바뀌었을 수 있습니다")
     return out
 
 def merge_new(existing):
