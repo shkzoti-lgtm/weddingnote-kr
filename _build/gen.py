@@ -454,25 +454,28 @@ def event_page(e, same_city):
 # ── 행사장별 페이지 ─────────────────────────────────────────────
 VENUE_ALL = []
 def prev_venues():
-    """직전 배포본의 /_venues.txt — 일정이 빠져도 페이지를 유지하기 위한 목록.
-       읽지 못하면 venues_seed.txt 로 대체한다(최초 1회용). 실패해도 배포는 정상."""
+    """예전에 페이지가 있었던 행사장 목록.
+       직전 배포본의 /_venues.txt 와 venues_seed.txt 를 '합쳐서' 돌려준다.
+       (둘 중 하나만 쓰면, 씨앗이 반영되기 전 빌드가 _venues.txt 를 먼저
+        만들어 버렸을 때 씨앗이 영영 안 쓰인다)
+       읽기에 실패해도 배포는 정상 진행된다."""
     import urllib.request
+    out = []
     try:
         req = urllib.request.Request(DOMAIN.rstrip("/") + "/_venues.txt",
                                      headers={"User-Agent": "weddingnote-build"})
         with urllib.request.urlopen(req, timeout=15) as r:
             out = [x.strip() for x in r.read().decode("utf-8").splitlines() if x.strip()]
         print("이전 행사장 %d곳 확인" % len(out))
-        return out
     except Exception as e:
-        print("이전 행사장 목록을 읽지 못했습니다(%s) → 씨앗 목록 사용" % e)
-    # 최초 1회용 씨앗 — 예전에 페이지가 있었던 행사장
+        print("이전 행사장 목록을 읽지 못했습니다(%s)" % e)
     seed = os.path.join(os.path.dirname(__file__), "venues_seed.txt")
     if os.path.exists(seed):
-        out = [x.strip() for x in open(seed, encoding="utf-8") if x.strip()]
-        print("씨앗 행사장 %d곳 사용" % len(out))
-        return out
-    return []
+        sd = [x.strip() for x in open(seed, encoding="utf-8") if x.strip()]
+        add = [v for v in sd if v not in out]
+        if add: print("씨앗에서 %d곳 추가: %s" % (len(add), ", ".join(add)))
+        out += add
+    return list(dict.fromkeys(out))
 
 def venue_page(venue, evs):
     slug = EV.slugify(venue)
