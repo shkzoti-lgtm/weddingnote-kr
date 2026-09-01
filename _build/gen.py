@@ -453,6 +453,27 @@ def event_page(e, same_city):
 
 # ── 행사장별 페이지 ─────────────────────────────────────────────
 VENUE_ALL = []
+def prev_venues():
+    """직전 배포본의 /_venues.txt — 일정이 빠져도 페이지를 유지하기 위한 목록.
+       읽지 못하면 venues_seed.txt 로 대체한다(최초 1회용). 실패해도 배포는 정상."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(DOMAIN.rstrip("/") + "/_venues.txt",
+                                     headers={"User-Agent": "weddingnote-build"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            out = [x.strip() for x in r.read().decode("utf-8").splitlines() if x.strip()]
+        print("이전 행사장 %d곳 확인" % len(out))
+        return out
+    except Exception as e:
+        print("이전 행사장 목록을 읽지 못했습니다(%s) → 씨앗 목록 사용" % e)
+    # 최초 1회용 씨앗 — 예전에 페이지가 있었던 행사장
+    seed = os.path.join(os.path.dirname(__file__), "venues_seed.txt")
+    if os.path.exists(seed):
+        out = [x.strip() for x in open(seed, encoding="utf-8") if x.strip()]
+        print("씨앗 행사장 %d곳 사용" % len(out))
+        return out
+    return []
+
 def venue_page(venue, evs):
     slug = EV.slugify(venue)
     path = "/행사장/%s/" % slug; url = DOMAIN + path
@@ -461,15 +482,27 @@ def venue_page(venue, evs):
     for e in evs:
         if e["city"] not in cities: cities.append(e["city"])
     c1 = cities[0] if cities else "전국"
-    title = "%s 웨딩박람회 일정 %d건 | 무료초대권 - %s" % (venue, len(evs), SITE)
-    desc = "%s에서 열리는 웨딩박람회 일정 %d건을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % (venue, len(evs))
+    if evs:
+        title = "%s 웨딩박람회 일정 %d건 | 무료초대권 - %s" % (venue, len(evs), SITE)
+        desc = "%s에서 열리는 웨딩박람회 일정 %d건을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % (venue, len(evs))
+        lead = "%s에서 열리는 웨딩박람회 %d건입니다. 날짜를 확인하고 무료 초대권을 신청하세요." % (venue, len(evs))
+    else:
+        title = "%s 웨딩박람회 일정 안내 | 무료초대권 - %s" % (venue, SITE)
+        desc = "%s는 현재 확정된 웨딩박람회 회차가 없습니다. 새 일정이 잡히면 이 페이지에 반영되며, 다른 행사장과 이번주 일정도 함께 확인하실 수 있습니다." % venue
+        lead = "%s는 현재 확정된 회차가 없습니다. 새 일정이 잡히면 이 페이지에 바로 반영됩니다." % venue
     kw = "%s 웨딩박람회, %s 결혼박람회, %s 웨딩박람회 일정, %s 무료초대권" % (venue, venue, venue, venue)
     bc = [("홈",DOMAIN+"/"),("행사장",DOMAIN+"/행사장/"),(venue,url)]
     lds = [ld_breadcrumb(bc), ld_itemlist(venue, [e["name"] for e in evs])]
 
     # 사실 문단 — 실제 데이터에서만 뽑는다
-    facts = [ED.pick(ED.VEN_LEAD, venue, "vl").format(v=venue, c1=c1),
-             ED.pick(ED.VEN_COUNT, venue, "vc").format(v=venue, n=len(evs))]
+    if evs:
+        facts = [ED.pick(ED.VEN_LEAD, venue, "vl").format(v=venue, c1=c1),
+                 ED.pick(ED.VEN_COUNT, venue, "vc").format(v=venue, n=len(evs))]
+    else:
+        facts = ["%s에서 진행된 웨딩박람회는 회차마다 주최와 참여 업체 구성이 달라집니다. "
+                 "지금은 확정 공지된 회차가 없지만, 새 일정이 잡히면 이 페이지에 먼저 올라옵니다." % venue,
+                 "행사장을 정해 두고 기다리시는 경우라면 이번주 일정과 월별 일정을 함께 보시는 편이 빠릅니다. "
+                 "같은 지역의 다른 행사장에서 비슷한 시기에 열리는 회차가 있는 경우가 많습니다."]
     if evs:
         d1, d2 = EV.fmt(evs[0]["start"]), EV.fmt(evs[-1]["end"])
         facts.append(ED.pick(ED.VEN_SPAN, venue, "vs").format(d1=d1, d2=d2) if d1 != d2
@@ -503,7 +536,7 @@ def venue_page(venue, evs):
  <section class="hero"><div class="wrap">
   <p class="eyebrow">행사장별 일정</p>
   <h1>{esc(venue)} 웨딩박람회 일정</h1>
-  <p class="lead">{esc(venue)}에서 열리는 웨딩박람회 {len(evs)}건입니다. 날짜를 확인하고 무료 초대권을 신청하세요.</p>
+  <p class="lead">{esc(lead)}</p>
  </div></section>
  <section class="wrap"><h2 class="sec">{esc(h2i)}</h2><div class="factbox">{fact_html}</div></section>
  <section class="wrap"><div class="cards">{cards_html(evs, show_city=True)}</div></section>
@@ -517,9 +550,13 @@ def venue_page(venue, evs):
 
 def venue_index(vmap):
     path="/행사장/"; url=DOMAIN+path
+    _live = {k: v for k, v in vmap.items() if v}
+    _idle = sorted(k for k, v in vmap.items() if not v)
     items = "".join('<a class="gcard" href="/행사장/%s/"><b>%s</b><span>진행 예정 %d건</span></a>'
                     % (quote(EV.slugify(v)), esc(v), len(es))
-                    for v, es in sorted(vmap.items(), key=lambda x:-len(x[1])))
+                    for v, es in sorted(_live.items(), key=lambda x:-len(x[1])))
+    items += "".join('<a class="gcard" href="/행사장/%s/"><b>%s</b><span>예정 일정 없음</span></a>'
+                     % (quote(EV.slugify(v)), esc(v)) for v in _idle)
     bc=[("홈",DOMAIN+"/"),("행사장",url)]
     body=f"""{header()}{breadcrumb_html(bc)}<main>
      <section class="hero"><div class="wrap"><p class="eyebrow">행사장</p>
@@ -528,7 +565,7 @@ def venue_index(vmap):
      <section class="wrap"><div class="guidegrid">{items}</div></section>
      <section class="wrap"><h2 class="sec">행사장별로 보면 좋은 이유</h2><div class="factbox">
       <p>같은 행사장에서도 회차마다 주최와 참여 업체 구성이 달라집니다. 행사장을 기준으로 일정을 모아 보면 이동 경로가 익숙한 곳에서 여러 회차를 비교하실 수 있습니다.</p>
-      <p>현재 {len(vmap)}개 행사장에서 진행 예정 일정이 확인됩니다. 총 {sum(len(v) for v in vmap.values())}건이며, 각 행사장 페이지에서 날짜와 지역을 함께 확인하실 수 있습니다.</p>
+      <p>현재 {len(_live)}개 행사장에서 진행 예정 일정이 확인됩니다. 총 {sum(len(v) for v in _live.values())}건이며, 각 행사장 페이지에서 날짜와 지역을 함께 확인하실 수 있습니다.{f" 나머지 {len(_idle)}곳은 지금 확정된 회차가 없지만, 새 일정이 잡히면 해당 페이지에 바로 반영됩니다." if _idle else ""}</p>
       <p>행사장이 넓은 경우 입구에서 배치도를 먼저 확인하고 볼 순서를 정하시면 이동에만 쓰는 시간을 줄일 수 있습니다.</p>
       <p>주말 회차는 주차장이 일찍 차는 편이라 대중교통 경로를 함께 확인해 두시면 좋습니다.</p></div></section>
      <section class="wrap"><h2 class="sec">기간으로 찾기</h2><div class="chips near">
@@ -1055,10 +1092,14 @@ if __name__ == "__main__":
     for e in EVS:
         v = EV.venue_of(e)
         if v: vmap.setdefault(v, []).append(e)
-    vmap = {k:v for k,v in vmap.items() if len(v) >= 2}
+    vmap = {k:v for k,v in vmap.items() if len(v) >= 1}
+    # 한 번 만든 행사장 페이지는 일정이 빠져도 없애지 않는다 (404 → 색인 손실 방지)
+    for _v in prev_venues():
+        vmap.setdefault(_v, [])
     VENUE_ALL[:] = sorted(vmap.keys())
     venue_index(vmap)
     for v, es in vmap.items(): venue_page(v, es)
+    w("_venues.txt", "\n".join(sorted(vmap.keys())))
     # 이번주 / 월별
     week_page(EVS)
     mmap = {}
@@ -1100,6 +1141,7 @@ if __name__ == "__main__":
     print("  sitemap: 전체 %d건 / 내용 변경 %d건" % (len(URLS), changed))
     w("robots.txt", "User-agent: *\nAllow: /\n"
       "Disallow: /_cpaad-status.txt\nDisallow: /_pagehash.json\nDisallow: /_urls.txt\n"
+      "Disallow: /_venues.txt\n"
       "\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
