@@ -1,7 +1,8 @@
 # 넷리파이가 배포할 때마다 gen.py 를 실행해
 # 구글시트에서 최신 행사를 가져와 정적 HTML을 새로 굽습니다.
+# 그다음 indexnow.py 가 새로 생긴 페이지를 네이버·빙에 통보합니다.
 [build]
-  command = "python3 _build/gen.py"
+  command = "python3 _build/gen.py && python3 _build/indexnow.py"
   publish = "site"
 
 [build.environment]
