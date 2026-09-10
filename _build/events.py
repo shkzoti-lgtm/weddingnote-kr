@@ -1,3 +1,4 @@
+# weddingnote events.py — A안(지난 행사 아카이브 유지) 적용 v2026-09-10
 # -*- coding: utf-8 -*-
 """행사 데이터 로더 — 빌드 시 구글시트에서 가져와 정적 HTML로 주입
    네트워크 되면 시트 fetch, 안 되면 events_cache.psv 사용"""
@@ -140,7 +141,7 @@ def slugify(name):
 def sortkey(x):
     """목록 정렬 기준 — 상시 진행을 맨 위로, 그다음 시작일이 빠른 순.
        (not always) 이라 상시는 0, 나머지는 1 이 되어 앞에 선다."""
-    return (not x.get("always"), x["start"], x["city"])
+    return (bool(x.get("ended")), not x.get("always"), x["start"], x["city"])
 
 def load(refresh=True):
     if refresh:
@@ -177,6 +178,7 @@ def load(refresh=True):
                 "month": "",                          # 월별 페이지에는 넣지 않는다
                 "always": True,
                 "date_text": label,                   # 화면에 이 문구를 그대로 쓴다
+                "ended": False,
             })
             continue
 
@@ -185,7 +187,7 @@ def load(refresh=True):
             ed = datetime.date.fromisoformat(e) if e else sd
         except ValueError:
             continue
-        if ed < today: continue                      # 지난 행사 제외
+        _ended = (ed < today)                        # 지난 행사 → 버리지 않고 표시만 (A안, 2026-09-10)
         key = (city, name, s)
         if key in seen: continue
         seen.add(key)
@@ -200,6 +202,7 @@ def load(refresh=True):
             "month": s[:7],
             "always": False,
             "date_text": "",
+            "ended": _ended,
         })
     evs.sort(key=sortkey)
     return evs

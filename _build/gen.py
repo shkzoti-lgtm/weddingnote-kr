@@ -1,3 +1,4 @@
+# weddingnote gen.py — A안(지난 행사 아카이브 유지) 적용 v2026-09-10
 # -*- coding: utf-8 -*-
 """신규 B사이트 생성기 — 한글 클린URL + 문서 SEO 전면 적용
    실행: python3 gen.py     출력: ../site/"""
@@ -14,6 +15,7 @@ TODAY_D = datetime.date.today()
 TODAY = TODAY_D.isoformat()
 TOTAL_EV = 0      # 전국 등록 일정 수 (히어로 통계용)
 URLS = []
+ENDED_URLS = set()      # A안 2026-09-10 — 종료 행사 URL (사이트맵 우선순위·changefreq 용)
 
 def w(path, content):
     p = os.path.join(OUT, path.lstrip("/"))
@@ -61,7 +63,8 @@ def _file_of(u):
 def changefreq_of(u):
     rel = u[len(DOMAIN):]
     if rel == "/" or rel.startswith(("/일정", "/이번주")): return "daily"
-    if rel.startswith("/행사/"):   return "weekly"   # 개별 행사 상세는 거의 안 바뀐다
+    if rel.startswith("/행사/"):
+        return "monthly" if u in ENDED_URLS else "weekly"   # 종료분은 거의 안 바뀐다
     if rel.startswith("/행사장/"): return "weekly"
     if rel.startswith("/가이드/"): return "monthly"
     if rel.count("/") <= 3: return "daily"           # 지역 페이지 — 일정이 매일 바뀐다
@@ -311,14 +314,16 @@ def ld_event(e):
          if e.get("always") else
          {"startDate": e["start"].isoformat(), "endDate": e["end"].isoformat()}),
       "eventStatus":"https://schema.org/EventScheduled",
+      **({"@id": DOMAIN + "/행사/" + e["slug"] + "/"} if e.get("ended") else {}),
       "eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode",
       "location":{"@type":"Place","name":e["place"],
                   "address":{"@type":"PostalAddress","addressLocality":e["city"],
                              "addressCountry":"KR","streetAddress":e["place"]}},
       "image":[e["img"]] if e["img"] else [],
       "description":"%s에서 열리는 %s 일정과 무료 초대권 안내" % (e["city"], e["name"]),
-      "offers":{"@type":"Offer","price":"0","priceCurrency":"KRW",
-                "availability":"https://schema.org/InStock","url":e["link"]},
+      **({} if e.get("ended") else
+         {"offers":{"@type":"Offer","price":"0","priceCurrency":"KRW",
+                    "availability":"https://schema.org/InStock","url":e["link"]}}),
       "organizer":{"@type":"Organization","name":SITE}}, ensure_ascii=False)
 
 # ── 개별 행사 상세 페이지 ────────────────────────────────────────
@@ -328,6 +333,8 @@ def event_page(e, same_city):
     slug = e["slug"]
     path = "/행사/%s/" % slug; url = DOMAIN + path
     region = region_of_city(e["city"])
+    ended = bool(e.get("ended"))          # A안 2026-09-10 — 종료 행사도 페이지를 남긴다
+    _loc_url = "/%s/%s" % (region, "" if e["city"] == region else e["city"] + "/")
     if e.get("always"):
         d1 = d2 = ""
         dates = e.get("date_text") or "상시 진행"
@@ -350,14 +357,22 @@ def event_page(e, same_city):
     scale = ED.scale_sentence(e["name"])
     if scale: fact_sents.append(scale)
 
-    title = ("%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회"
-             % (e["name"], "상시 진행" if e.get("always")
-                else EV.fmt_short(e["start"]), e["city"]))
-    desc = "%s%s %s %s에서 열립니다. %s" % (e["name"], ED.josa(e["name"]),
-        dates, ad["gu"] or e["city"],
-        ED.pick(["무료 초대권 신청과 웨딩홀·스드메 상담 정보를 확인하세요.",
-                 "초대권 사전 신청 방법과 방문 전 확인 사항을 정리했습니다.",
-                 "무료 입장 신청과 상담 준비 항목을 안내합니다."], slug, "desc"))
+    if ended:
+        title = "%s 종료 — %s 웨딩박람회 다음 일정 안내" % (e["name"], e["city"])
+    else:
+        title = ("%s 일정 %s | 무료초대권 신청 - %s 웨딩박람회"
+                 % (e["name"], "상시 진행" if e.get("always")
+                    else EV.fmt_short(e["start"]), e["city"]))
+    if ended:
+        desc = ("%s%s %s %s에서 진행되어 종료되었습니다. %s에서 진행 중인 웨딩박람회 일정과 "
+                "무료 초대권 정보를 확인하세요." % (e["name"], ED.josa(e["name"]),
+                dates, ad["gu"] or e["city"], e["city"]))
+    else:
+        desc = "%s%s %s %s에서 열립니다. %s" % (e["name"], ED.josa(e["name"]),
+            dates, ad["gu"] or e["city"],
+            ED.pick(["무료 초대권 신청과 웨딩홀·스드메 상담 정보를 확인하세요.",
+                     "초대권 사전 신청 방법과 방문 전 확인 사항을 정리했습니다.",
+                     "무료 입장 신청과 상담 준비 항목을 안내합니다."], slug, "desc"))
     kw = "%s, %s 웨딩박람회, %s 일정, %s 무료초대권, %s결혼박람회" % (
         e["name"], e["city"], e["name"], e["name"], e["city"])
 
@@ -401,23 +416,46 @@ def event_page(e, same_city):
     hero_img = ('<div class="ephoto"><img src="%s" alt="%s 포스터" loading="lazy"></div>'
                 % (esc(e["img"]), esc(e["name"]))) if e["img"] else ""
 
+    # ── 종료 행사 안내 블록 (A안) ──
+    if ended:
+        _next = ("".join('<li><a href="/행사/%s/">%s <span>%s</span></a></li>'
+                         % (quote(x["slug"]), esc(x["name"]), EV.fmt_short(x["start"]))
+                         for x in others))
+        ended_notice = (
+          '<section class="wrap"><div class="aeo">'
+          '<h2>%s, 지금도 신청할 수 있나요?</h2>'
+          '<p class="ans"><b>이 행사는 종료되었습니다.</b> %s%s %s 일정으로 %s에서 진행되어 '
+          '현재는 초대권 신청을 받지 않습니다.</p>'
+          '<p class="ans-sub"><b>대신 확인하실 곳</b></p>'
+          '<ul>%s</ul>'
+          '<p class="pnote">※ 웨딩박람회는 같은 지역에서 매달 새로 열립니다. '
+          '아래 %s 지역 일정에서 가장 가까운 날짜를 확인하시면 됩니다.</p>'
+          '<p><a class="btn" href="%s">%s 웨딩박람회 전체 일정 보기</a></p>'
+          '</div></section>'
+          % (esc(e["name"]), esc(e["name"]), ED.josa(e["name"]), dates, esc(e["place"]),
+             (_next or ('<li><a href="%s">%s 진행 중인 웨딩박람회 일정</a></li>' % (_loc_url, esc(e["city"])))),
+             esc(e["city"]), _loc_url, esc(e["city"])))
+    else:
+        ended_notice = ""
+
     body = f"""{header(region, "" if e["city"]==region else e["city"])}
 {breadcrumb_html(bc)}
 <main>
  <section class="hero">
   <div class="wrap">
-   <p class="eyebrow">{esc(e['city'])} 웨딩박람회 · 모집중</p>
+   <p class="eyebrow">{esc(e['city'])} 웨딩박람회 · {"종료된 행사" if ended else "모집중"}</p>
    <h1>{esc(e['name'])}</h1>
    <table class="factsheet">
     <tr><th>행사일</th><td>{dates}{(' · ' + str(df['days']) + '일간') if df and df['days'] > 1 else ''}</td></tr>
     <tr><th>장소</th><td>{esc(e['place'])}</td></tr>
     <tr><th>지역</th><td><a href="/{region}/{'' if e['city']==region else e['city']+'/'}">{esc(e['city'])} 웨딩박람회 전체 일정</a></td></tr>
-    <tr><th>입장</th><td>무료 초대권 사전 신청</td></tr>
+    <tr><th>입장</th><td>{"행사 종료 — 신청 마감" if ended else "무료 초대권 사전 신청"}</td></tr>
    </table>
-   <a class="btn big" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청하기</a>
+   {f'<a class="btn big" href="{_loc_url}">{esc(e["city"])} 진행 중인 웨딩박람회 보기</a>' if ended else f'<a class="btn big" href="{esc(e["link"])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청하기</a>'}
   </div>
  </section>
  {('<section class="wrap">'+hero_img+'</section>') if hero_img else ''}
+ {ended_notice}
  <section class="wrap">
   <h2 class="sec">{esc(h2_info)}</h2>
   <div class="factbox">{fact_html}</div>
@@ -450,6 +488,56 @@ def event_page(e, same_city):
 {footer()}"""
     w(path+"index.html", head(title, desc, kw, url, lds) + body)
     URLS.append(url)
+    if ended: ENDED_URLS.add(url)
+
+# ── 지난 행사 아카이브 (A안, 2026-09-10) ─────────────────────────
+# 행사가 끝나면 페이지를 없애던 구조 때문에 URL 이 사라져 네이버가
+# 소프트404 로 잡고 색인이 쌓이지 않았다. 그래서 지난 행사도 페이지를
+# 유지한다. 시트에서 행이 빠져도 살아남도록 라이브 사이트의
+# /_events_archive.psv 를 읽어와 합친다. (행사장 목록과 같은 방식)
+ARCHIVE_MAX_DAYS = 730          # 2년 지난 행사는 아카이브에서 내린다
+
+def _psv(v):
+    return str(v).replace("|", "/").replace("\n", " ").strip()
+
+def load_archive():
+    import urllib.request
+    out = []
+    try:
+        req = urllib.request.Request(DOMAIN.rstrip("/") + "/_events_archive.psv",
+                                     headers={"User-Agent": "weddingnote-build"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read().decode("utf-8")
+    except Exception as ex:
+        print("  지난 행사 아카이브 없음 (%s) — 이번 빌드부터 쌓입니다" % type(ex).__name__)
+        return out
+    for line in raw.splitlines():
+        p2 = line.split("|")
+        if len(p2) < 9: continue
+        city, name, s1, e1, place, img, link, slug, benefit = p2[:9]
+        try:
+            sd = datetime.date.fromisoformat(s1)
+            ed = datetime.date.fromisoformat(e1)
+        except ValueError:
+            continue
+        if (TODAY_D - ed).days > ARCHIVE_MAX_DAYS: continue
+        out.append({"city": city, "name": name, "start": sd, "end": ed,
+                    "place": place, "img": img, "link": link, "slug": slug,
+                    "benefit": benefit, "dday": (sd - TODAY_D).days,
+                    "month": s1[:7], "always": False, "date_text": "", "ended": True})
+    print("  지난 행사 아카이브: %d건 복원" % len(out))
+    return out
+
+def save_archive(past):
+    lines = []
+    for e in past:
+        lines.append("|".join([_psv(e["city"]), _psv(e["name"]),
+                               e["start"].isoformat(), e["end"].isoformat(),
+                               _psv(e["place"]), _psv(e.get("img","")),
+                               _psv(e.get("link","")), _psv(e["slug"]),
+                               _psv(e.get("benefit",""))]))
+    w("_events_archive.psv", "\n".join(lines))
+    print("  지난 행사 아카이브 저장: %d건" % len(lines))
 
 # ── 행사장별 페이지 ─────────────────────────────────────────────
 VENUE_ALL = []
@@ -1069,12 +1157,24 @@ if __name__ == "__main__":
     except Exception as _e2:
         print("  진단 파일 기록 실패:", _e2)
 
+    # ── A안(2026-09-10) 지난 행사 아카이브 ──────────────────────────
+    # EVS 에는 이제 종료 행사도 들어온다. 목록·카드에는 진행중만 쓰고,
+    # 상세 페이지는 종료분까지 만들어 URL 을 살려 둔다.
+    _arch = load_archive()
+    _seen_slug = set(x["slug"] for x in EVS)
+    for a in _arch:
+        if a["slug"] not in _seen_slug:
+            EVS.append(a); _seen_slug.add(a["slug"])
+
     EVS.sort(key=EV.sortkey)
-    TOTAL_EV = len(EVS)
-    print("  진행/예정 행사: %d건" % len(EVS))
+    PAST_EVS = [e for e in EVS if e.get("ended")]
+    LIVE_EVS = [e for e in EVS if not e.get("ended")]
+    TOTAL_EV = len(LIVE_EVS)
+    print("  진행/예정 행사: %d건 / 종료 보관: %d건" % (len(LIVE_EVS), len(PAST_EVS)))
+    save_archive(PAST_EVS)
 
     by_city = {}
-    for e in EVS: by_city.setdefault(e["city"], []).append(e)
+    for e in LIVE_EVS: by_city.setdefault(e["city"], []).append(e)
     def evs_for(loc):
         cs = cities_of(loc)
         if cs:
@@ -1084,15 +1184,15 @@ if __name__ == "__main__":
             return sorted(out, key=EV.sortkey)
         return by_city.get(loc, [])
 
-    home(EVS)
+    home(LIVE_EVS)
     for loc, region, path in ALL_LOCS:
         loc_page(loc, region, path, evs_for(loc))
 
-    # 개별 행사 페이지
+    # 개별 행사 페이지 — 종료분까지 전부 생성 (URL 유지)
     for e in EVS: event_page(e, by_city.get(e["city"], []))
     # 행사장 페이지
     vmap = {}
-    for e in EVS:
+    for e in LIVE_EVS:
         v = EV.venue_of(e)
         if v: vmap.setdefault(v, []).append(e)
     vmap = {k:v for k,v in vmap.items() if len(v) >= 1}
@@ -1104,13 +1204,13 @@ if __name__ == "__main__":
     for v, es in vmap.items(): venue_page(v, es)
     w("_venues.txt", "\n".join(sorted(vmap.keys())))
     # 이번주 / 월별
-    week_page(EVS)
+    week_page(LIVE_EVS)
     mmap = {}
-    for e in EVS:
+    for e in LIVE_EVS:
         if e.get("month"): mmap.setdefault(e["month"], []).append(e)
     months = sorted(mmap.keys())
     month_index(mmap)
-    ALWAYS_EVS = [e for e in EVS if e.get("always")]
+    ALWAYS_EVS = [e for e in LIVE_EVS if e.get("always")]
     _cur = TODAY_D.strftime("%Y-%m")
     for ym in months:
         month_page(ym, mmap[ym], months, ALWAYS_EVS if ym >= _cur else [])
@@ -1136,6 +1236,7 @@ if __name__ == "__main__":
             lm = TODAY; changed += 1
         cur_hash[u] = {"h": h, "d": lm}
         pr = "1.0" if u==DOMAIN+"/" else ("0.9" if u.count("/")<=4 else "0.8")
+        if u in ENDED_URLS: pr = "0.4"      # 종료 행사 — 살려두되 우선순위는 낮춘다
         sm.append('<url><loc>%s</loc><lastmod>%s</lastmod><changefreq>%s</changefreq><priority>%s</priority></url>'
                   % (enc_url(u), lm, changefreq_of(u), pr))
     sm.append('</urlset>')
@@ -1144,7 +1245,7 @@ if __name__ == "__main__":
     print("  sitemap: 전체 %d건 / 내용 변경 %d건" % (len(URLS), changed))
     w("robots.txt", "User-agent: *\nAllow: /\n"
       "Disallow: /_cpaad-status.txt\nDisallow: /_pagehash.json\nDisallow: /_urls.txt\n"
-      "Disallow: /_venues.txt\n"
+      "Disallow: /_venues.txt\nDisallow: /_events_archive.psv\n"
       "\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
