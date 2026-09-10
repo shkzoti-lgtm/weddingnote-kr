@@ -1,4 +1,4 @@
-# weddingnote gen.py — A안(지난 행사 아카이브 유지) 적용 v2026-09-10
+# weddingnote gen.py — A안(지난 행사 아카이브 유지) v2 스냅샷방식 2026-09-10
 # -*- coding: utf-8 -*-
 """신규 B사이트 생성기 — 한글 클린URL + 문서 SEO 전면 적용
    실행: python3 gen.py     출력: ../site/"""
@@ -500,17 +500,26 @@ ARCHIVE_MAX_DAYS = 730          # 2년 지난 행사는 아카이브에서 내�
 def _psv(v):
     return str(v).replace("|", "/").replace("\n", " ").strip()
 
-def load_archive():
+def _read_psv(name, label):
+    """라이브 사이트에 올려둔 PSV 를 읽어온다. 실패해도 빌드는 계속된다."""
     import urllib.request
     out = []
     try:
-        req = urllib.request.Request(DOMAIN.rstrip("/") + "/_events_archive.psv",
+        req = urllib.request.Request(DOMAIN.rstrip("/") + "/" + name,
                                      headers={"User-Agent": "weddingnote-build"})
         with urllib.request.urlopen(req, timeout=20) as r:
             raw = r.read().decode("utf-8")
     except Exception as ex:
-        print("  지난 행사 아카이브 없음 (%s) — 이번 빌드부터 쌓입니다" % type(ex).__name__)
-        return out
+        # 시험용 로컬 폴백 — 환경변수 WN_LOCAL_PSV=1 일 때만. 넷리파이에서는 안 탄다.
+        raw = ""
+        if os.environ.get("WN_LOCAL_PSV") == "1":
+            _lp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_test_psv", name)
+            if os.path.exists(_lp):
+                raw = io.open(_lp, encoding="utf-8").read() if False else open(_lp, encoding="utf-8").read()
+                print("  %s: 로컬 파일에서 읽음(시험 모드)" % label)
+        if not raw:
+            print("  %s 없음 (%s) — 이번 빌드부터 쌓입니다" % (label, type(ex).__name__))
+            return out
     for line in raw.splitlines():
         p2 = line.split("|")
         if len(p2) < 9: continue
@@ -525,19 +534,31 @@ def load_archive():
                     "place": place, "img": img, "link": link, "slug": slug,
                     "benefit": benefit, "dday": (sd - TODAY_D).days,
                     "month": s1[:7], "always": False, "date_text": "", "ended": True})
-    print("  지난 행사 아카이브: %d건 복원" % len(out))
+    print("  %s: %d건" % (label, len(out)))
     return out
 
+def load_archive():
+    return _read_psv("_events_archive.psv", "지난 행사 아카이브")
+
+def load_live_snapshot():
+    """직전 빌드의 '진행 중' 목록. 시트에서 행이 빠져도 이 스냅샷으로 종료를 감지한다.
+       — 시트는 매일 새로 수집되어 끝난 행사가 그냥 사라지기 때문에 필요하다."""
+    return _read_psv("_events_live.psv", "직전 빌드 진행중 스냅샷")
+
+def _psv_line(e):
+    return "|".join([_psv(e["city"]), _psv(e["name"]),
+                     e["start"].isoformat(), e["end"].isoformat(),
+                     _psv(e["place"]), _psv(e.get("img","")),
+                     _psv(e.get("link","")), _psv(e["slug"]),
+                     _psv(e.get("benefit",""))])
+
+def save_live_snapshot(live):
+    w("_events_live.psv", "\n".join(_psv_line(e) for e in live))
+    print("  진행중 스냅샷 저장: %d건" % len(live))
+
 def save_archive(past):
-    lines = []
-    for e in past:
-        lines.append("|".join([_psv(e["city"]), _psv(e["name"]),
-                               e["start"].isoformat(), e["end"].isoformat(),
-                               _psv(e["place"]), _psv(e.get("img","")),
-                               _psv(e.get("link","")), _psv(e["slug"]),
-                               _psv(e.get("benefit",""))]))
-    w("_events_archive.psv", "\n".join(lines))
-    print("  지난 행사 아카이브 저장: %d건" % len(lines))
+    w("_events_archive.psv", "\n".join(_psv_line(e) for e in past))
+    print("  지난 행사 아카이브 저장: %d건" % len(past))
 
 # ── 행사장별 페이지 ─────────────────────────────────────────────
 VENUE_ALL = []
@@ -1161,10 +1182,27 @@ if __name__ == "__main__":
     # EVS 에는 이제 종료 행사도 들어온다. 목록·카드에는 진행중만 쓰고,
     # 상세 페이지는 종료분까지 만들어 URL 을 살려 둔다.
     _arch = load_archive()
+    _prev_live = load_live_snapshot()
     _seen_slug = set(x["slug"] for x in EVS)
+
+    # 직전 빌드에 있었는데 이번 시트에서 사라진 행사 = 그 사이에 끝난 행사.
+    # 시트가 매일 새로 수집되어 끝난 행사를 지워 버리므로, 이 경로가 없으면
+    # 아카이브에 아무것도 안 쌓인다. (2026-09-10 1차 배포에서 실제로 0건이었음)
+    _newly_ended = 0
+    for a in _prev_live:
+        if a["slug"] in _seen_slug: continue
+        a["ended"] = True
+        _arch.append(a); _seen_slug.add(a["slug"])
+        _newly_ended += 1
+    if _newly_ended:
+        print("  새로 종료된 행사: %d건 → 아카이브 편입" % _newly_ended)
+
+    _arch_seen = set()
     for a in _arch:
-        if a["slug"] not in _seen_slug:
-            EVS.append(a); _seen_slug.add(a["slug"])
+        if a["slug"] in _arch_seen: continue
+        _arch_seen.add(a["slug"])
+        if a["slug"] not in set(x["slug"] for x in EVS):
+            EVS.append(a)
 
     EVS.sort(key=EV.sortkey)
     PAST_EVS = [e for e in EVS if e.get("ended")]
@@ -1172,6 +1210,7 @@ if __name__ == "__main__":
     TOTAL_EV = len(LIVE_EVS)
     print("  진행/예정 행사: %d건 / 종료 보관: %d건" % (len(LIVE_EVS), len(PAST_EVS)))
     save_archive(PAST_EVS)
+    save_live_snapshot(LIVE_EVS)
 
     by_city = {}
     for e in LIVE_EVS: by_city.setdefault(e["city"], []).append(e)
@@ -1245,7 +1284,7 @@ if __name__ == "__main__":
     print("  sitemap: 전체 %d건 / 내용 변경 %d건" % (len(URLS), changed))
     w("robots.txt", "User-agent: *\nAllow: /\n"
       "Disallow: /_cpaad-status.txt\nDisallow: /_pagehash.json\nDisallow: /_urls.txt\n"
-      "Disallow: /_venues.txt\nDisallow: /_events_archive.psv\n"
+      "Disallow: /_venues.txt\nDisallow: /_events_archive.psv\nDisallow: /_events_live.psv\n"
       "\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
