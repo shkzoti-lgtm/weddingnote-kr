@@ -1,4 +1,4 @@
-# weddingnote gen.py — A안(지난 행사 아카이브 유지) v2 스냅샷방식 2026-09-10
+# weddingnote gen.py — 1안(제목·설명 가변 숫자 제거) v2026-09-14  [기반: A안 v2 2026-09-10]
 # -*- coding: utf-8 -*-
 """신규 B사이트 생성기 — 한글 클린URL + 문서 SEO 전면 적용
    실행: python3 gen.py     출력: ../site/"""
@@ -595,11 +595,11 @@ def venue_page(venue, evs):
         if e["city"] not in cities: cities.append(e["city"])
     c1 = cities[0] if cities else "전국"
     if evs:
-        title = "%s 웨딩박람회 일정 %d건 | 무료초대권 - %s" % (venue, len(evs), SITE)
-        desc = "%s에서 열리는 웨딩박람회 일정 %d건을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % (venue, len(evs))
-        lead = "%s에서 열리는 웨딩박람회 %d건입니다. 날짜를 확인하고 무료 초대권을 신청하세요." % (venue, len(evs))
+        title = "%s 웨딩박람회 일정, 무료초대권 신청 | %s" % (venue, SITE)   # v2026-09-14 건수 제거
+        desc = "%s에서 열리는 웨딩박람회 일정을 정리했습니다. 날짜와 장소, 무료 초대권 신청 정보를 확인하세요." % venue
+        lead = "%s에서 열리는 웨딩박람회 일정입니다. 날짜를 확인하고 무료 초대권을 신청하세요." % venue
     else:
-        title = "%s 웨딩박람회 일정 안내 | 무료초대권 - %s" % (venue, SITE)
+        title = "%s 웨딩박람회 일정, 무료초대권 신청 | %s" % (venue, SITE)   # v2026-09-14 유/무 제목 통일
         desc = "%s는 현재 확정된 웨딩박람회 회차가 없습니다. 새 일정이 잡히면 이 페이지에 반영되며, 다른 행사장과 이번주 일정도 함께 확인하실 수 있습니다." % venue
         lead = "%s는 현재 확정된 회차가 없습니다. 새 일정이 잡히면 이 페이지에 바로 반영됩니다." % venue
     kw = "%s 웨딩박람회, %s 결혼박람회, %s 웨딩박람회 일정, %s 무료초대권" % (venue, venue, venue, venue)
@@ -695,8 +695,8 @@ def week_page(evs):
     mon = TODAY_D - datetime.timedelta(days=TODAY_D.weekday())
     sun = mon + datetime.timedelta(days=13)
     cur = [e for e in evs if e["start"] <= sun and e["end"] >= TODAY_D]
-    title = "이번주 웨딩박람회 일정 %d건 (%s~%s) | %s" % (len(cur), EV.fmt_short(mon), EV.fmt_short(sun), SITE)
-    desc = "이번주와 다음주 전국에서 열리는 웨딩박람회 %d건을 모았습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요." % len(cur)
+    title = "이번주 웨딩박람회 일정 | 무료초대권 신청 - %s" % SITE   # v2026-09-14 건수·날짜범위 제거
+    desc = "이번주와 다음주 전국에서 열리는 웨딩박람회를 모았습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요."
     bc=[("홈",DOMAIN+"/"),("이번주 웨딩박람회",url)]
 
     # 이 페이지만의 사실 — 주말/평일, 요일 분포, 남은 일수
@@ -754,8 +754,8 @@ def month_page(ym, evs, all_months, always_evs=None):
     path="/일정/%s/" % ym; url=DOMAIN+path
     label = "%d년 %s" % (y, MON_KO[m])
     evs = sorted(evs, key=lambda x: x["start"])
-    title = "%s 웨딩박람회 일정 %d건 총정리 | 무료초대권 - %s" % (label, len(evs), SITE)
-    desc = "%s에 열리는 전국 웨딩박람회 %d건의 날짜와 장소를 정리했습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요." % (label, len(evs))
+    title = "%s 웨딩박람회 일정 총정리 | 무료초대권 - %s" % (label, SITE)   # v2026-09-14 건수 제거
+    desc = "%s에 열리는 전국 웨딩박람회의 날짜와 장소를 정리했습니다. 지역별 일정과 무료 초대권 신청 정보를 확인하세요." % label
     kw = "%s 웨딩박람회, %s 웨딩박람회 일정, %d년 웨딩박람회, 웨딩박람회 무료초대권" % (label, label, y)
     bc=[("홈",DOMAIN+"/"),("월별 일정",DOMAIN+"/일정/"),(label,url)]
     nav = "".join('<a class="%s" href="/일정/%s/">%s</a>' %
