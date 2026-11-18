@@ -16,6 +16,9 @@ TODAY = TODAY_D.isoformat()
 TOTAL_EV = 0      # 전국 등록 일정 수 (히어로 통계용)
 URLS = []
 ENDED_URLS = set()      # A안 2026-09-10 — 종료 행사 URL (사이트맵 우선순위·changefreq 용)
+PAST_BY_LOC = {}        # 2026-11-18 — 지역/도시별 종료 행사 (지역 페이지 하단 링크용)
+ARCHIVE_PATH = "/종료된-박람회/"
+ARCHIVE_CSS = '<style>.pastgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}.pastlink{display:block;padding:12px 14px;border:1px solid #e6e8ec;border-radius:9px;background:#fff;transition:.15s}.pastlink:hover{border-color:#12233d;background:#f7f8fa}.pastlink b{display:block;font-size:14px;color:#12233d;line-height:1.35}.pastlink span{display:block;margin-top:5px;font-size:12px;color:#7a818c}.pastwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}.pastcity h3{font-size:15px;color:#12233d;margin:0 0 8px;border-bottom:1px solid #e6e8ec;padding-bottom:6px}.pastcity h3 small{font-weight:400;color:#8a909a;margin-left:6px}.pastlist{list-style:none;margin:0;padding:0}.pastlist li{padding:7px 0;border-bottom:1px dashed #eef0f3}.pastlist li a{font-size:14px;color:#12233d}.pastlist li .d{display:inline-block;margin-left:6px;font-size:12px;color:#7a818c}.pastlist li .p{display:block;font-size:12px;color:#9aa0a9;margin-top:2px}</style>'
 
 def w(path, content):
     p = os.path.join(OUT, path.lstrip("/"))
@@ -92,6 +95,7 @@ def header(active_region="", active_city=""):
      <a href="/이번주-웨딩박람회/">이번주</a>
      <a href="/일정/">달력</a>
      <a href="/행사장/">행사장</a>
+     <a href="/종료된-박람회/">지난 박람회</a>
      <a href="/가이드/웨딩박람회-활용법/">활용법</a>
      <a href="/가이드/스드메-견적-비교/">스드메 견적</a>
      <a href="/가이드/결혼준비-체크리스트/">체크리스트</a>
@@ -113,7 +117,7 @@ def footer():
   <div class="fnav"><b>결혼준비 가이드</b><div class="chips">
     <a href="/이번주-웨딩박람회/">이번주 웨딩박람회</a>
     <a href="/일정/">월별 일정 달력</a>
-    <a href="/행사장/">주요 행사장</a>
+    <a href="/행사장/">주요 행사장</a> <a href="/종료된-박람회/">지난 박람회 모아보기</a>
     <a href="/가이드/웨딩박람회-활용법/">웨딩박람회 활용법</a>
     <a href="/가이드/스드메-견적-비교/">스드메 견적 비교</a>
     <a href="/가이드/결혼준비-체크리스트/">결혼준비 체크리스트</a>
@@ -196,6 +200,24 @@ def loc_page(loc, region, path, my_evs=None):
     lds = [ld_breadcrumb(bc), ld_faq(faq), ld_howto(loc), ld_website()]
     if my_evs: lds.append(ld_itemlist(loc, [x["name"] for x in my_evs]))
 
+    # ── 지난 행사 링크 (종료 페이지를 고아로 두지 않기 위한 내부 링크) ──
+    _past = sorted(PAST_BY_LOC.get(loc, []), key=lambda x: x["end"], reverse=True)[:12]
+    if _past:
+        _items = "".join(
+            '<a class="pastlink" href="/행사/%s/"><b>%s</b><span>%s</span></a>'
+            % (e["slug"], esc(e["name"]), e["end"].strftime("%Y.%m.%d") + " 종료")
+            for e in _past)
+        past_section = (
+            ARCHIVE_CSS +
+            '<section class="wrap"><h2 class="sec">지난 %s 웨딩박람회</h2>'
+            '<p class="lead">이미 종료된 일정입니다. 같은 주최사가 다음 회차를 여는 경우가 많아 '
+            '행사 내용과 장소를 미리 확인해 두시면 도움이 됩니다.</p>'
+            '<div class="pastgrid">%s</div>'
+            '<div class="chips near"><a href="%s">지난 박람회 전체 보기</a></div></section>'
+            % (esc(loc), _items, ARCHIVE_PATH))
+    else:
+        past_section = ""
+
     body = f"""{header(region, "" if is_hub else loc)}
 {breadcrumb_html(bc)}
 <main>
@@ -258,6 +280,7 @@ def loc_page(loc, region, path, my_evs=None):
   <h2 class="sec">{h2_near}</h2>
   <div class="chips near">{near_links}</div>
  </section>
+ {past_section}
 </main>
 {footer()}"""
     w(path + "index.html", head(title, desc, kw, url, lds) + body)
@@ -851,6 +874,117 @@ def month_index(mmap):
       "웨딩박람회 달력, 월별 웨딩박람회, 웨딩박람회 일정표", url, [ld_breadcrumb(bc)]) + body)
     URLS.append(url)
 
+# ── 지난(종료) 박람회 모아보기 ──────────────────────────────────
+def archive_month_page(ym, evs, all_months):
+    path = "%s%s/" % (ARCHIVE_PATH, ym)
+    url = DOMAIN + path
+    y, mo = int(ym[:4]), int(ym[5:7])
+    label = "%d년 %s" % (y, MON_KO[mo])
+    evs = sorted(evs, key=lambda x: (x["end"], x["city"]), reverse=True)
+
+    by_city = {}
+    for e in evs: by_city.setdefault(e["city"], []).append(e)
+    blocks = ""
+    for city in sorted(by_city.keys()):
+        rows = "".join(
+            '<li><a href="/행사/%s/">%s</a>'
+            '<span class="d">%s ~ %s</span>'
+            '<span class="p">%s</span></li>'
+            % (e["slug"], esc(e["name"]),
+               e["start"].strftime("%m.%d"), e["end"].strftime("%m.%d"),
+               esc(e["place"][:40]))
+            for e in by_city[city])
+        blocks += ('<div class="pastcity"><h3>%s <small>%d건</small></h3>'
+                   '<ul class="pastlist">%s</ul></div>' % (esc(city), len(by_city[city]), rows))
+
+    others = "".join('<a href="%s%s/">%d년 %s</a>' % (ARCHIVE_PATH, m, int(m[:4]), MON_KO[int(m[5:7])])
+                     for m in sorted(all_months, reverse=True) if m != ym)
+    bc = [("홈", DOMAIN+"/"), ("지난 박람회", DOMAIN+ARCHIVE_PATH), (label, url)]
+    body = f"""{ARCHIVE_CSS}{header()}{breadcrumb_html(bc)}<main>
+ <section class="hero"><div class="wrap"><p class="eyebrow">지난 박람회</p>
+  <h1>{label} 웨딩박람회 결과</h1>
+  <p class="lead">{label}에 전국에서 열린 웨딩박람회 {len(evs)}건입니다. 모두 종료된 일정이며,
+   각 행사의 장소와 구성은 다음 회차를 가늠하는 참고가 됩니다.</p></div></section>
+ <section class="wrap"><div class="pastwrap">{blocks}</div></section>
+ <section class="wrap"><h2 class="sec">다른 달 보기</h2><div class="chips near">{others}</div></section>
+ <section class="wrap"><h2 class="sec">지금 신청할 수 있는 일정</h2><div class="chips near">
+  <a href="/이번주-웨딩박람회/">이번주 웨딩박람회</a><a href="/일정/">월별 일정</a><a href="/">전국 지역별 일정</a>
+ </div></section>
+</main>{footer()}"""
+    w(path + "index.html", head(
+        "%s 웨딩박람회 결과 모음 | %s" % (label, SITE),
+        "%s에 열린 전국 웨딩박람회 %d건을 지역별로 정리했습니다. 종료된 일정의 장소와 구성을 확인하세요."
+        % (label, len(evs)),
+        "지난 웨딩박람회, %s 웨딩박람회, 웨딩박람회 후기" % label,
+        url, [ld_breadcrumb(bc)]) + body)
+    URLS.append(url)
+    ENDED_URLS.add(url)
+
+
+def archive_index(past_evs):
+    path = ARCHIVE_PATH
+    url = DOMAIN + path
+    mmap = {}
+    for e in past_evs: mmap.setdefault(e["start"].isoformat()[:7], []).append(e)
+
+    months = sorted(mmap.keys(), reverse=True)
+    cards = "".join('<a class="gcard" href="%s%s/"><b>%d년 %s</b><span>박람회 %d건</span></a>'
+                    % (ARCHIVE_PATH, m, int(m[:4]), MON_KO[int(m[5:7])], len(mmap[m]))
+                    for m in months)
+
+    by_city = {}
+    for e in past_evs: by_city.setdefault(e["city"], []).append(e)
+    _lp = {l: p for l, r, p in ALL_LOCS}
+    city_chips = "".join('<a href="%s">%s <small>%d</small></a>'
+                         % (_lp.get(c, "/"), esc(c), len(v))
+                         for c, v in sorted(by_city.items(), key=lambda kv: -len(kv[1]))
+                         if c in _lp)
+
+    recent = sorted(past_evs, key=lambda x: x["end"], reverse=True)[:24]
+    rec_items = "".join(
+        '<a class="pastlink" href="/행사/%s/"><b>%s</b><span>%s · %s 종료</span></a>'
+        % (e["slug"], esc(e["name"]), esc(e["city"]), e["end"].strftime("%Y.%m.%d"))
+        for e in recent)
+
+    bc = [("홈", DOMAIN+"/"), ("지난 박람회", url)]
+    body = f"""{ARCHIVE_CSS}{header()}{breadcrumb_html(bc)}<main>
+ <section class="hero"><div class="wrap"><p class="eyebrow">아카이브</p>
+  <h1>지난 웨딩박람회 모아보기</h1>
+  <p class="lead">지금까지 {SITE}에 올라온 종료된 웨딩박람회 {len(past_evs)}건입니다.
+   같은 행사장과 주최사가 회차를 이어 가는 경우가 많아, 지난 일정을 보면 다음 개최 시기와
+   규모를 가늠하는 데 도움이 됩니다.</p></div></section>
+
+ <section class="wrap"><h2 class="sec">월별로 보기</h2>
+  <div class="guidegrid">{cards}</div></section>
+
+ <section class="wrap"><h2 class="sec">지역별 지난 일정</h2>
+  <p class="lead">지역 페이지로 이동하면 현재 모집 중인 일정과 그 지역의 지난 박람회를 함께 볼 수 있습니다.</p>
+  <div class="chips near">{city_chips}</div></section>
+
+ <section class="wrap"><h2 class="sec">최근 종료된 박람회</h2>
+  <div class="pastgrid">{rec_items}</div></section>
+
+ <section class="wrap"><h2 class="sec">지난 일정을 참고하는 방법</h2><div class="factbox">
+  <p>대형 박람회는 같은 전시장에서 분기 또는 월 단위로 반복되는 경우가 많습니다. 관심 있던 행사가 끝났다면 같은 장소의 다음 회차를 기다리는 편이 빠릅니다.</p>
+  <p>지난 행사 페이지에는 당시 장소와 혜택 구성이 남아 있습니다. 비슷한 규모의 행사를 고를 때 비교 기준으로 쓰실 수 있습니다.</p>
+  <p>지금 신청 가능한 일정은 지역 페이지와 이번주 일정에서 확인하세요.</p></div></section>
+
+ <section class="wrap"><h2 class="sec">지금 신청할 수 있는 일정</h2><div class="chips near">
+  <a href="/이번주-웨딩박람회/">이번주 웨딩박람회</a><a href="/일정/">월별 일정</a><a href="/행사장/">행사장별 일정</a>
+ </div></section>
+</main>{footer()}"""
+    w(path + "index.html", head(
+        "지난 웨딩박람회 모아보기 | " + SITE,
+        "종료된 전국 웨딩박람회 %d건을 월별·지역별로 정리했습니다. 다음 회차를 가늠하는 자료로 활용하세요." % len(past_evs),
+        "지난 웨딩박람회, 종료된 웨딩박람회, 웨딩박람회 아카이브, 웨딩박람회 후기",
+        url, [ld_breadcrumb(bc)]) + body)
+    URLS.append(url)
+
+    for m in months:
+        archive_month_page(m, mmap[m], months)
+    print("  지난 박람회 허브: %d건 / 월 페이지 %d개" % (len(past_evs), len(months)))
+
+
 # ── 홈 ──────────────────────────────────────────────────────────
 def home(EVS=None):
     url = DOMAIN + "/"
@@ -1223,9 +1357,23 @@ if __name__ == "__main__":
             return sorted(out, key=EV.sortkey)
         return by_city.get(loc, [])
 
+    # 지역/권역별 종료 행사 모으기 (지역 페이지 하단 '지난 행사' 링크용)
+    _past_by_city = {}
+    for e in PAST_EVS: _past_by_city.setdefault(e["city"], []).append(e)
+    for loc, region, path in ALL_LOCS:
+        cs = cities_of(loc)
+        acc = list(_past_by_city.get(loc, []))
+        if cs:
+            for c in cs: acc += _past_by_city.get(c, [])
+        if acc: PAST_BY_LOC[loc] = acc
+
     home(LIVE_EVS)
     for loc, region, path in ALL_LOCS:
         loc_page(loc, region, path, evs_for(loc))
+
+    # 지난 박람회 허브 + 월별 페이지
+    if PAST_EVS:
+        archive_index(PAST_EVS)
 
     # 개별 행사 페이지 — 종료분까지 전부 생성 (URL 유지)
     for e in EVS: event_page(e, by_city.get(e["city"], []))
