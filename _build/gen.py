@@ -436,6 +436,23 @@ def event_page(e, same_city):
 
     lds = [ld_event(e), ld_breadcrumb(bc), ld_faq(faq), ld_howto(e["city"]),
            ld_itemlist(e["name"], [x["name"] for x in others] or [e["name"]])]
+    # ── 제휴 링크는 종료 후에도 유지한다 (검색 유입이 계속 들어오므로) ──
+    _aff = esc(e.get("link") or "")
+    _aff_a = (lambda cls, label:
+              '<a class="%s" href="%s" target="_blank" rel="noopener nofollow sponsored">%s</a>'
+              % (cls, _aff, label)) if _aff else (lambda cls, label: "")
+
+    if ended:
+        _entry_td = ("행사 종료 — " + _aff_a("", "주최사 페이지에서 최신 일정 보기")) if _aff \
+                    else "행사 종료 — 신청 마감"
+        _cta_html = (_aff_a("btn big", "주최사 최신 일정·초대권 확인") if _aff
+                     else '<a class="btn big" href="%s">%s 진행 중인 웨딩박람회 보기</a>'
+                          % (_loc_url, esc(e["city"])))
+    else:
+        _entry_td = "무료 초대권 사전 신청"
+        _cta_html = (_aff_a("btn big", "무료 초대권 신청하기") if _aff
+                     else '<a class="btn big" href="/초대권-신청/">무료 초대권 신청하기</a>')
+
     hero_img = ('<div class="ephoto"><img src="%s" alt="%s 포스터" loading="lazy"></div>'
                 % (esc(e["img"]), esc(e["name"]))) if e["img"] else ""
 
@@ -453,11 +470,16 @@ def event_page(e, same_city):
           '<ul>%s</ul>'
           '<p class="pnote">※ 웨딩박람회는 같은 지역에서 매달 새로 열립니다. '
           '아래 %s 지역 일정에서 가장 가까운 날짜를 확인하시면 됩니다.</p>'
+          '%s'
           '<p><a class="btn" href="%s">%s 웨딩박람회 전체 일정 보기</a></p>'
           '</div></section>'
           % (esc(e["name"]), esc(e["name"]), ED.josa(e["name"]), dates, esc(e["place"]),
              (_next or ('<li><a href="%s">%s 진행 중인 웨딩박람회 일정</a></li>' % (_loc_url, esc(e["city"])))),
-             esc(e["city"]), _loc_url, esc(e["city"])))
+             esc(e["city"]),
+             (('<p class="ans-sub"><b>이 박람회를 주최한 곳</b></p><p>'
+               + _aff_a("", "주최사 페이지에서 현재 모집 중인 일정과 초대권을 확인할 수 있습니다.")
+               + '</p>') if _aff else ''),
+             _loc_url, esc(e["city"])))
     else:
         ended_notice = ""
 
@@ -472,9 +494,9 @@ def event_page(e, same_city):
     <tr><th>행사일</th><td>{dates}{(' · ' + str(df['days']) + '일간') if df and df['days'] > 1 else ''}</td></tr>
     <tr><th>장소</th><td>{esc(e['place'])}</td></tr>
     <tr><th>지역</th><td><a href="/{region}/{'' if e['city']==region else e['city']+'/'}">{esc(e['city'])} 웨딩박람회 전체 일정</a></td></tr>
-    <tr><th>입장</th><td>{"행사 종료 — 신청 마감" if ended else "무료 초대권 사전 신청"}</td></tr>
+    <tr><th>입장</th><td>{_entry_td}</td></tr>
    </table>
-   {f'<a class="btn big" href="{_loc_url}">{esc(e["city"])} 진행 중인 웨딩박람회 보기</a>' if ended else f'<a class="btn big" href="{esc(e["link"])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청하기</a>'}
+   {_cta_html}
   </div>
  </section>
  {('<section class="wrap">'+hero_img+'</section>') if hero_img else ''}
