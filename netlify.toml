@@ -7,10 +7,43 @@
 
 [build.environment]
   PYTHON_VERSION = "3.11"
+  # 빌드 서버 기본값이 UTC 라서 오전 빌드가 전날 날짜로 찍히는 문제 방지
   TZ = "Asia/Seoul"
 
+# ── 2026-11-24 수정 ────────────────────────────────────────────
+# 기존에는 /assets/* 전체를 1년 immutable 로 캐시했다.
+# 그 결과 events.js / style.css 를 고쳐도 재방문자에게는
+# 최대 1년 동안 옛 파일이 계속 전달됐다.
+# (실제로 events.js 를 바꿨는데 화면에 반영되지 않는 일이 있었다)
+# → 이미지·폰트는 그대로 길게, 코드 파일은 짧게 나눈다.
+
 [[headers]]
-  for = "/assets/*"
+  for = "/assets/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=300, must-revalidate"
+
+[[headers]]
+  for = "/assets/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=300, must-revalidate"
+
+[[headers]]
+  for = "/assets/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*.webp"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
@@ -19,4 +52,3 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-
