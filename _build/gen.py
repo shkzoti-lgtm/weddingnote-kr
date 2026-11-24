@@ -18,6 +18,89 @@ URLS = []
 ENDED_URLS = set()      # A안 2026-09-10 — 종료 행사 URL (사이트맵 우선순위·changefreq 용)
 PAST_BY_LOC = {}        # 2026-11-18 — 지역/도시별 종료 행사 (지역 페이지 하단 링크용)
 ARCHIVE_PATH = "/종료된-박람회/"
+GO_PATH      = "/go/"          # 제휴 링크 클릭 추적 경유 경로
+EMPTY_REDIR  = []              # 일정 0건 도시 → 권역으로 보낼 규칙
+NEW_CITIES   = []              # 이번 빌드에서 새로 편입된 도시
+
+# 주소 앞머리(시·도) → 사이트 권역
+PROV2REGION = {
+    "서울":"서울", "인천":"인천", "부산":"부산", "제주":"제주",
+    "경기":"경기",
+    "강원":"강원",
+    "대전":"충청", "세종":"충청", "충북":"충청", "충남":"충청", "충청":"충청",
+    "광주":"전라", "전북":"전라", "전남":"전라", "전라":"전라",
+    "대구":"경상", "울산":"경상", "경북":"경상", "경남":"경상", "경상":"경상",
+}
+
+def region_from_place(place):
+    """장소 주소의 맨 앞 시·도 표기로 권역을 판정한다."""
+    s = re.sub(r"\s+", "", str(place or ""))[:12]
+    for p, r in PROV2REGION.items():
+        if s.startswith(p): return r
+    for p, r in PROV2REGION.items():
+        if p in s: return r
+    return None
+
+def prev_cities():
+    """직전 배포본의 /_cities.txt — 한 번 생긴 도시 페이지는 계속 유지한다."""
+    out = []
+    try:
+        import urllib.request
+        req = urllib.request.Request(DOMAIN.rstrip("/") + "/_cities.txt",
+                                     headers={"User-Agent": "weddingnote-build"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read().decode("utf-8")
+        for line in raw.splitlines():
+            p = line.split("|")
+            if len(p) == 2 and p[0].strip() and p[1].strip():
+                out.append((p[0].strip(), p[1].strip()))
+    except Exception as ex:
+        print("  이전 도시 목록 없음 (%s) — 이번 빌드부터 쌓입니다" % type(ex).__name__)
+    return out
+
+def adopt_cities(evs):
+    """시트에 등장한 도시 중 목록에 없는 것을 권역에 자동 편입한다.
+       REGIONS / ALL_LOCS / cities_of 를 새 목록으로 갈아끼운다."""
+    global REGIONS, ALL_LOCS, cities_of, region_of_city
+
+    known = set()
+    for n, cs in REGIONS:
+        known.add(n); known.update(cs)
+    base = {n: list(cs) for n, cs in REGIONS}
+    order = [n for n, _ in REGIONS]
+
+    # ① 직전 배포본에 있던 도시 복원 (행사가 없어져도 페이지 유지)
+    for city, region in prev_cities():
+        if city in known or region not in base: continue
+        base[region].append(city); known.add(city)
+
+    # ② 이번 시트에 새로 등장한 도시
+    for e in evs:
+        c = str(e.get("city") or "").strip()
+        if not c or c in known: continue
+        r = region_from_place(e.get("place"))
+        if r not in base:
+            print("  [편입 보류] %s — 권역 판정 실패 (장소: %s)" % (c, str(e.get("place"))[:40]))
+            continue
+        base[r].append(c); known.add(c)
+        NEW_CITIES.append((c, r))
+        print("  [신규 도시 편입] %s → %s 권역" % (c, r))
+
+    REGIONS = [(n, sorted(set(base[n]))) for n in order]
+    ALL_LOCS = []
+    for n, cs in REGIONS:
+        ALL_LOCS.append((n, n, "/%s/" % n))
+        for c in cs:
+            ALL_LOCS.append((c, n, "/%s/%s/" % (n, c)))
+    _cmap = {n: cs for n, cs in REGIONS}
+    _rmap = {}
+    for n, cs in REGIONS:
+        for c in cs: _rmap[c] = n
+    cities_of = lambda name: _cmap.get(name, [])
+    region_of_city = lambda city: _rmap.get(city, city)
+    w("_cities.txt", "\n".join("%s|%s" % (c, n) for n, cs in REGIONS for c in cs))
+
+MOBILE_CSS = '<style>.citypick{border-top:1px dashed #e6e8ec}.citypick>summary{list-style:none;cursor:pointer;padding:9px 2px;font-size:14px;font-weight:700;color:#12233d;display:flex;align-items:center;gap:8px}.citypick>summary::-webkit-details-marker{display:none}.citypick>summary i{font-style:normal;font-weight:500;font-size:12px;color:#8a909a}.citypick>summary::after{content:"\\25BE";margin-left:auto;color:#8a909a}.citypick[open]>summary::after{content:"\\25B4"}@media(max-width:768px){header{position:static}.bar{position:sticky;top:0;z-index:50}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.stats>div{padding:10px 4px}.stats b{font-size:17px}.stats span{font-size:11px}}</style>'
 ARCHIVE_CSS = '<style>.pastgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}.pastlink{display:block;padding:12px 14px;border:1px solid #e6e8ec;border-radius:9px;background:#fff;transition:.15s}.pastlink:hover{border-color:#12233d;background:#f7f8fa}.pastlink b{display:block;font-size:14px;color:#12233d;line-height:1.35}.pastlink span{display:block;margin-top:5px;font-size:12px;color:#7a818c}.pastwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}.pastcity h3{font-size:15px;color:#12233d;margin:0 0 8px;border-bottom:1px solid #e6e8ec;padding-bottom:6px}.pastcity h3 small{font-weight:400;color:#8a909a;margin-left:6px}.pastlist{list-style:none;margin:0;padding:0}.pastlist li{padding:7px 0;border-bottom:1px dashed #eef0f3}.pastlist li a{font-size:14px;color:#12233d}.pastlist li .d{display:inline-block;margin-left:6px;font-size:12px;color:#7a818c}.pastlist li .p{display:block;font-size:12px;color:#9aa0a9;margin-top:2px}</style>'
 
 def w(path, content):
@@ -87,8 +170,10 @@ def header(active_region="", active_city=""):
         links = '<a class="%s" href="/%s/">전체</a>' % ("on" if not active_city else "", active_region)
         links += "".join('<a class="%s" href="/%s/%s/">%s</a>' %
                          ("on" if c==active_city else "", active_region, c, c) for c in cs)
-        sub = '<nav class="subnav">%s</nav>' % links
-    return f"""<header>
+        _cur = active_city or "전체"
+        sub = ('<details class="citypick"><summary>%s <i>지역 변경</i></summary>'
+               '<nav class="subnav">%s</nav></details>') % (esc(_cur), links)
+    return f"""{MOBILE_CSS}<header>
  <div class="bar"><div class="wrap">
    <a class="logo" href="/"><span class="mark">W</span>{SITE}</a>
    <nav class="gnb">
@@ -225,26 +310,28 @@ def loc_page(loc, region, path, my_evs=None):
   <div class="wrap">
    <p class="eyebrow">{label} · {YEAR}년 최신</p>
    <h1>{loc} 웨딩박람회 일정</h1>
-   <p class="lead">{intro} {loc}에서 열리는 웨딩박람회·결혼박람회·허니문박람회 일정과
-    무료 초대권 정보를 매일 갱신해 정리합니다.</p>
-   <div class="stats">
-     <div><b>{ev_count}</b><span>{loc} 진행 예정</span></div>
-     <div><b>{TOTAL_EV}</b><span>전국 등록 일정</span></div>
-     <div><b>100%</b><span>무료 초대권</span></div>
-     <div><b>{TODAY_D.month}.{TODAY_D.day}</b><span>최근 갱신</span></div>
-   </div>
+   <p class="lead">{intro}</p>
   </div>
  </section>
-
- <section class="wrap"><div class="factbox">{loc_fact_html}</div></section>
-
- <section class="wrap">{aeo_block(loc, region)}</section>
 
  <section class="wrap">
   <h2 class="sec">{loc} 웨딩박람회 최신 일정 {("("+str(ev_count)+"건)") if ev_count else ""}</h2>
   <p class="sub">모집 중인 일정만 표시됩니다. 카드를 눌러 상세 정보와 무료 초대권을 확인하세요.</p>
   <div class="cards" id="event-cards" data-cities="{cities_csv}" data-loc="{loc}">{static_cards}</div>
  </section>
+
+ <section class="wrap">
+   <div class="stats">
+     <div><b>{ev_count}</b><span>{loc} 진행 예정</span></div>
+     <div><b>{TOTAL_EV}</b><span>전국 등록 일정</span></div>
+     <div><b>100%</b><span>무료 초대권</span></div>
+     <div><b>{TODAY_D.month}.{TODAY_D.day}</b><span>최근 갱신</span></div>
+   </div>
+ </section>
+
+ <section class="wrap"><div class="factbox">{loc_fact_html}</div></section>
+
+ <section class="wrap">{aeo_block(loc, region)}</section>
 
  <section class="wrap">
   <h2 class="sec">{loc} 웨딩박람회 유형 비교</h2>
@@ -308,7 +395,7 @@ def event_card(e, show_city=False):
  <h3><a href="/행사/{quote(e['slug'])}/">{esc(e['name'])}</a></h3>
  <div class="meta">일정 {dates}</div>
  <div class="meta">장소 {esc(e['place'])}</div>{ben}
- <a class="cta" href="{esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
+ <a class="cta" href="{go_url(e) or esc(e['link'])}" target="_blank" rel="noopener nofollow sponsored">무료 초대권 신청</a>
  <a class="detail" href="/행사/{quote(e['slug'])}/">박람회 정보 자세히 보기</a>
 </div></article>"""
 
@@ -437,7 +524,7 @@ def event_page(e, same_city):
     lds = [ld_event(e), ld_breadcrumb(bc), ld_faq(faq), ld_howto(e["city"]),
            ld_itemlist(e["name"], [x["name"] for x in others] or [e["name"]])]
     # ── 제휴 링크는 종료 후에도 유지한다 (검색 유입이 계속 들어오므로) ──
-    _aff = esc(e.get("link") or "")
+    _aff = esc(go_url(e) or e.get("link") or "")
     _aff_a = (lambda cls, label:
               '<a class="%s" href="%s" target="_blank" rel="noopener nofollow sponsored">%s</a>'
               % (cls, _aff, label)) if _aff else (lambda cls, label: "")
@@ -895,6 +982,52 @@ def month_index(mmap):
       "월별로 전국 웨딩박람회 일정을 모아 확인할 수 있습니다. 원하는 달을 선택하세요.",
       "웨딩박람회 달력, 월별 웨딩박람회, 웨딩박람회 일정표", url, [ld_breadcrumb(bc)]) + body)
     URLS.append(url)
+
+# ── 제휴 링크 클릭 추적 (/go/) ──────────────────────────────────
+# 방문자가 "무료 초대권 신청" 을 누르면 이 페이지를 0.2초 경유하면서
+# 앱스스크립트 웹앱에 클릭을 기록하고, 곧바로 제휴 링크로 넘어간다.
+# 웹앱 주소가 비어 있으면 기록 없이 즉시 이동만 한다.
+CLICK_LOG_URL = "https://script.google.com/macros/s/AKfycbzYG34bSKd5FKTYWvCgeFzCdElm9WE7vTy4WTKsekWjQE6Bsz2sm-x2ZYpWH5pyIyiM/exec"
+
+def go_page(e):
+    """제휴 링크로 넘기는 경유 페이지. 색인하지 않는다."""
+    target = e.get("link") or ""
+    if not target: return
+    path = "%s%s/" % (GO_PATH, e["slug"])
+    body = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="2;url=%(t)s">
+<title>이동 중…</title>
+<style>body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+display:flex;align-items:center;justify-content:center;min-height:80vh;margin:0;color:#12233d;text-align:center}
+a{color:#12233d}</style></head><body>
+<div><p>초대권 신청 페이지로 이동합니다…</p>
+<p><a href="%(t)s" rel="noopener nofollow sponsored">바로 이동하기</a></p></div>
+<script>
+(function(){
+  var T=%(tj)s, LOG=%(lj)s, SL=%(sj)s, CT=%(cj)s;
+  try{
+    if(LOG){
+      var q=LOG+"?click=1&e="+encodeURIComponent(SL)+"&c="+encodeURIComponent(CT)
+            +"&r="+encodeURIComponent(document.referrer||"")+"&t="+Date.now();
+      if(navigator.sendBeacon){ navigator.sendBeacon(q); }
+      else { var i=new Image(); i.src=q; }
+    }
+  }catch(err){}
+  setTimeout(function(){ location.replace(T); }, 250);
+})();
+</script></body></html>""" % {"t": html.escape(target, quote=True),
+                              "tj": json.dumps(target, ensure_ascii=False),
+                              "lj": json.dumps(CLICK_LOG_URL, ensure_ascii=False),
+                              "sj": json.dumps(e["slug"], ensure_ascii=False),
+                              "cj": json.dumps(e.get("city",""), ensure_ascii=False)}
+    w(path + "index.html", body)   # URLS 에 넣지 않는다 (사이트맵 제외)
+
+def go_url(e):
+    """카드·상세의 제휴 버튼이 가리킬 주소."""
+    return ("%s%s/" % (GO_PATH, quote(e["slug"]))) if e.get("link") else ""
+
 
 # ── 지난(종료) 박람회 모아보기 ──────────────────────────────────
 def archive_month_page(ym, evs, all_months):
@@ -1363,6 +1496,9 @@ if __name__ == "__main__":
     EVS.sort(key=EV.sortkey)
     PAST_EVS = [e for e in EVS if e.get("ended")]
     LIVE_EVS = [e for e in EVS if not e.get("ended")]
+
+    # 새 지역 자동 편입 — 목록에 없던 도시도 페이지를 갖는다
+    adopt_cities(EVS)
     TOTAL_EV = len(LIVE_EVS)
     print("  진행/예정 행사: %d건 / 종료 보관: %d건" % (len(LIVE_EVS), len(PAST_EVS)))
     save_archive(PAST_EVS)
@@ -1391,7 +1527,11 @@ if __name__ == "__main__":
 
     home(LIVE_EVS)
     for loc, region, path in ALL_LOCS:
-        loc_page(loc, region, path, evs_for(loc))
+        _my = evs_for(loc)
+        # 도시 페이지인데 진행 중인 일정이 0건이면 권역 페이지로 보낸다
+        if loc != region and not _my:
+            EMPTY_REDIR.append((path, "/%s/" % region))
+        loc_page(loc, region, path, _my)
 
     # 지난 박람회 허브 + 월별 페이지
     if PAST_EVS:
@@ -1399,6 +1539,11 @@ if __name__ == "__main__":
 
     # 개별 행사 페이지 — 종료분까지 전부 생성 (URL 유지)
     for e in EVS: event_page(e, by_city.get(e["city"], []))
+    # 제휴 클릭 추적 경유 페이지
+    _go = 0
+    for e in EVS:
+        if e.get("link"): go_page(e); _go += 1
+    print("  클릭 추적 페이지: %d개" % _go)
     # 행사장 페이지
     vmap = {}
     for e in LIVE_EVS:
@@ -1452,9 +1597,21 @@ if __name__ == "__main__":
     w("sitemap.xml", "\n".join(sm))
     w("_pagehash.json", json.dumps(cur_hash, ensure_ascii=False))
     print("  sitemap: 전체 %d건 / 내용 변경 %d건" % (len(URLS), changed))
+    # ── 일정 0건 도시 → 권역 페이지로 자동 전달 ──
+    if EMPTY_REDIR:
+        _rl = ["# 자동 생성 — 진행 중인 일정이 없는 도시는 권역 페이지로 보냅니다",
+               "# 일정이 다시 등록되면 다음 빌드에서 이 줄이 사라집니다"]
+        for frm, to in EMPTY_REDIR:
+            _rl.append("%s  %s  302!" % (quote(frm, safe="/"), quote(to, safe="/")))
+        w("_redirects", "\n".join(_rl))
+        print("  0건 도시 리다이렉트: %d곳" % len(EMPTY_REDIR))
+    else:
+        w("_redirects", "# 모든 도시에 진행 중인 일정이 있습니다")
+
     w("robots.txt", "User-agent: *\nAllow: /\n"
       "Disallow: /_cpaad-status.txt\nDisallow: /_pagehash.json\nDisallow: /_urls.txt\n"
       "Disallow: /_venues.txt\nDisallow: /_events_archive.psv\nDisallow: /_events_live.psv\n"
+      "Disallow: /_cities.txt\nDisallow: /go/\n"
       "\nSitemap: %s/sitemap.xml\n" % DOMAIN)
     w("%s.txt" % INDEXNOW_KEY, INDEXNOW_KEY)
     # RSS
