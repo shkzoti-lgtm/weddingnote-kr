@@ -194,6 +194,16 @@ def breadcrumb_html(items):
     return '<div class="wrap"><nav class="bc">%s</nav></div>' % (
         " › ".join('<a href="%s">%s</a>'%(u.replace(DOMAIN,""),n) for n,u in items))
 
+def asset_ver(name):
+    """/assets/<name> 의 내용 해시 8자리. 파일이 바뀌면 주소도 바뀌어
+       넷리파이의 1년 캐시(immutable)에 막히지 않고 즉시 반영된다."""
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "assets", name)
+        with open(p, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()[:8]
+    except Exception:
+        return TODAY.replace("-", "")
+
 def footer():
     hub = "".join('<a href="/%s/">%s 웨딩박람회</a>'%(n,n) for n,_ in REGIONS)
     return f"""<footer>
@@ -212,7 +222,7 @@ def footer():
    방문자에게 추가 비용은 없습니다. 행사 일정과 혜택은 주최 측 사정에 따라 변경될 수 있습니다.</p>
   <p class="biz">{BIZ}<br>Copyright © {YEAR} {SITE}. All rights reserved.</p>
  </div></footer>
-<script src="/assets/events.js" defer></script></body></html>"""
+<script src="/assets/events.js?v={asset_ver('events.js')}" defer></script></body></html>"""
 
 # ── 지역 페이지 ─────────────────────────────────────────────────
 def faqs_for(loc):
